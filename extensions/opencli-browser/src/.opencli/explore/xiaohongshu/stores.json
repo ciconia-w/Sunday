@@ -1,0 +1,455 @@
+[
+  {
+    "actions": [
+      "getUserInfo",
+      "getUserFollow",
+      "getUserPageInfo",
+      "toFollow",
+      "unFollow",
+      "fetchNotes",
+      "onTouristLogin",
+      "updateFollowStatus",
+      "fetchProfilePageData",
+      "resetProfilePageData",
+      "toggleUserApiV2",
+      "getUIDByUrl",
+      "refreshUserBoard"
+    ],
+    "id": "user",
+    "stateKeys": [
+      "loggedIn",
+      "activated",
+      "userInfo",
+      "follow",
+      "userPageData",
+      "isOwnPage",
+      "visitTargetUserId",
+      "activeTab",
+      "notes",
+      "isFetchingNotes",
+      "tabScrollTop",
+      "userFetchingStatus",
+      "userNoteFetchingStatus",
+      "bannedInfo",
+      "firstFetchNote"
+    ],
+    "type": "pinia"
+  },
+  {
+    "actions": [
+      "updateAppSettings",
+      "setFirstVisitUrl",
+      "setCurrentLayout",
+      "setFeedbackPopupVisible"
+    ],
+    "id": "global",
+    "stateKeys": [
+      "appSettings",
+      "supportWebp",
+      "serverTime",
+      "grayMode",
+      "currentPageInstance",
+      "referer",
+      "pwaAddDesktopPrompt",
+      "firstVisitUrl",
+      "easyAccessModalVisible",
+      "currentLayout",
+      "isNIO",
+      "fullscreenLocking",
+      "feedbackPopupVisible",
+      "trackFps",
+      "supportAVIF"
+    ],
+    "type": "pinia"
+  },
+  {
+    "actions": [
+      "loadMoreBoardListData",
+      "getBoardFeeds",
+      "getBoardDetails",
+      "getBoardPageData"
+    ],
+    "id": "board",
+    "stateKeys": [
+      "boardListData",
+      "isLoadingBoardList",
+      "boardDetails",
+      "boardFeedsMap",
+      "boardPageStatus",
+      "userBoardList",
+      "errorInfo"
+    ],
+    "type": "pinia"
+  },
+  {
+    "actions": [
+      "setUserFileListData",
+      "removeFile"
+    ],
+    "id": "UserFileStore",
+    "stateKeys": [
+      "visitTargetUserId",
+      "currentFileListData"
+    ],
+    "type": "pinia"
+  },
+  {
+    "actions": [
+      "reset",
+      "openLogin",
+      "closeLogin",
+      "toggleAgree",
+      "toggleTooltip",
+      "clearPhone",
+      "updateQrData",
+      "setIsObPagesVisible",
+      "setObPageFillInProgress",
+      "beforeFillInGender",
+      "beforeFillInAge",
+      "afterFillInAge",
+      "setInSpamCheckSendAuthCode",
+      "reportUserInfo",
+      "getRegisterFusingConfig",
+      "handleLoginStep",
+      "setLogining",
+      "setRiskUser",
+      "setInAntiSpamCheckLogin",
+      "setInAntiSpamCheckSecurityCode"
+    ],
+    "id": "login",
+    "stateKeys": [
+      "loginMethod",
+      "from",
+      "showLogin",
+      "agreed",
+      "showTooltip",
+      "loginData",
+      "validPhone",
+      "validCode",
+      "errors",
+      "qrData",
+      "counter",
+      "inAntiSpamChecking",
+      "recentFrom",
+      "isObPagesVisible",
+      "obPageFillInProgress"
+    ],
+    "type": "pinia"
+  },
+  {
+    "actions": [
+      "fetchFeeds",
+      "fetchFeedsOnServer",
+      "getLikeNum",
+      "reset",
+      "switchCategory",
+      "initMfStatistics",
+      "addReadFeedCount",
+      "addVisitTimes",
+      "getHomefeedCategory",
+      "getResourceInfo",
+      "toggleFeedsApiPrefetch",
+      "updatePrefetchId",
+      "clearPlaceholderFeeds",
+      "setIsUsingPlaceholderFeeds",
+      "setPlaceholderFeedsConsumed",
+      "setIsReplace",
+      "setImgNoteFilterStatus",
+      "updateCategory"
+    ],
+    "id": "feed",
+    "stateKeys": [
+      "query",
+      "isFetching",
+      "isError",
+      "feedsWrapper",
+      "undertakeNote",
+      "feeds",
+      "currentChannel",
+      "unreadInfo",
+      "validIds",
+      "mfStatistics",
+      "channels",
+      "isResourceDisplay",
+      "isActivityEnd",
+      "cancelFeedRequest",
+      "prefetchId"
+    ],
+    "type": "pinia"
+  },
+  {
+    "actions": [
+      "resize"
+    ],
+    "id": "layout",
+    "stateKeys": [
+      "layoutInfoReady",
+      "columns",
+      "columnsWithSidebar",
+      "gap",
+      "horizontalGapPx",
+      "columnWidth",
+      "feedsWrapperWidth",
+      "feedsContentWidth",
+      "minRenderNotes",
+      "interactionWidth",
+      "isMin",
+      "widthType",
+      "bufferRow",
+      "sideBarWidth",
+      "isMobileStyle"
+    ],
+    "type": "pinia"
+  },
+  {
+    "actions": [],
+    "id": "aiAbExp",
+    "stateKeys": [
+      "isAIMode"
+    ],
+    "type": "pinia"
+  },
+  {
+    "actions": [
+      "getNotification",
+      "replyComment",
+      "getNotificationCount",
+      "exposeNotificationItem",
+      "reset"
+    ],
+    "id": "notification",
+    "stateKeys": [
+      "isFetching",
+      "activeTabUnreadCount",
+      "activeTabKey",
+      "activeTabName",
+      "notificationCount",
+      "notificationMap"
+    ],
+    "type": "pinia"
+  },
+  {
+    "actions": [
+      "loadMore",
+      "getSuggestions",
+      "updateKeywordFrom",
+      "initSuggestions",
+      "mutateSearchValue",
+      "getQueryTrending",
+      "getSugRecommend",
+      "setQueryTrendingWithBack",
+      "getUserLists",
+      "loadMoreUsers",
+      "resetFetchingStatus",
+      "clearHistoryList",
+      "deleteHistory",
+      "addHistory",
+      "getHistoryList",
+      "initHistory",
+      "searchPageCloseLoginBox",
+      "setHotspotSearch",
+      "checkHotspotStorageStatus",
+      "resetSearchFilter"
+    ],
+    "id": "search",
+    "stateKeys": [
+      "state",
+      "searchContext",
+      "feeds",
+      "searchValue",
+      "suggestions",
+      "userInputSugTrigger",
+      "keywordFrom",
+      "sourcePageInstance",
+      "tagSearch",
+      "activeTagSearch",
+      "searchFeedsWrapper",
+      "currentSearchType",
+      "hintWord",
+      "sugType",
+      "queryTrendingInfo"
+    ],
+    "type": "pinia"
+  },
+  {
+    "actions": [
+      "initAgent",
+      "ensureConnected",
+      "disconnect",
+      "setSetupPromise",
+      "createConversation",
+      "clearConversation",
+      "sendMessage",
+      "updateHistoryQuerys",
+      "getLonglinkAdapter",
+      "getCurrentRoundId",
+      "setCurrentActiveRoundId",
+      "getCurrentActiveRoundId"
+    ],
+    "id": "conversation",
+    "stateKeys": [
+      "agent",
+      "activeConversation",
+      "messages",
+      "rounds",
+      "unfinishedMessages",
+      "isExistUnfinishedMessages",
+      "lastMessageInConversation",
+      "historyQuerys",
+      "currentActiveRoundId",
+      "isInitializing",
+      "coordinator"
+    ],
+    "type": "pinia"
+  },
+  {
+    "actions": [
+      "getCurrentRound",
+      "openTraceSourceDrawer",
+      "closeTraceSourceDrawer",
+      "openTraceSourceKeywordDrawer",
+      "closeTraceSourceKeywordDrawer"
+    ],
+    "id": "traceSourceStore",
+    "stateKeys": [
+      "traceSourceInfo",
+      "traceSourceKeywordInfo",
+      "drawerPriorityMap"
+    ],
+    "type": "pinia"
+  },
+  {
+    "actions": [
+      "addHistory",
+      "deleteHistory",
+      "clearHistory"
+    ],
+    "id": "aiSugHistory",
+    "stateKeys": [
+      "historyList"
+    ],
+    "type": "pinia"
+  },
+  {
+    "actions": [],
+    "id": "AiGuideWords",
+    "stateKeys": [
+      "guideWords"
+    ],
+    "type": "pinia"
+  },
+  {
+    "actions": [
+      "getGuideWordsData"
+    ],
+    "id": "AiSugDataForChat",
+    "stateKeys": [
+      "guideWordsData"
+    ],
+    "type": "pinia"
+  },
+  {
+    "actions": [
+      "openActivity",
+      "closePanel",
+      "setEntryInfo",
+      "getEntryInfo",
+      "openActivityPanel",
+      "setExposed",
+      "isExposed",
+      "getGlobalConfig",
+      "getJumpType"
+    ],
+    "id": "activity",
+    "stateKeys": [
+      "isOpen",
+      "currentUrl",
+      "entryList"
+    ],
+    "type": "pinia"
+  },
+  {
+    "actions": [
+      "getImageListByNoteId",
+      "getTrackDataByNoteId",
+      "reset",
+      "updateNoteByNoteId",
+      "getNoteDetailByNoteId",
+      "collectServerRequestError",
+      "getDefaultNoteId",
+      "deleteNoteDetailByNoteId",
+      "setCurrentNoteId",
+      "setRoute",
+      "updateMediaWidth",
+      "updateHeight",
+      "updateWidthAndHeight"
+    ],
+    "id": "note",
+    "stateKeys": [
+      "prevRouteData",
+      "prevRoute",
+      "commentTarget",
+      "isImgFullscreen",
+      "gotoPage",
+      "firstNoteId",
+      "autoOpenNote",
+      "topCommentId",
+      "noteDetailMap",
+      "serverRequestInfo",
+      "noteRequest",
+      "volume",
+      "recommendVideoMap",
+      "videoFeedType",
+      "rate"
+    ],
+    "type": "pinia"
+  },
+  {
+    "actions": [
+      "getCollectionList",
+      "getFeedFetchedInfo",
+      "getFeedFetchNotesInfo",
+      "setFeedFetchedInfo"
+    ],
+    "id": "nioStore",
+    "stateKeys": [
+      "collectionListDataSource",
+      "collectionListFeedFetchInfos",
+      "error"
+    ],
+    "type": "pinia"
+  },
+  {
+    "actions": [
+      "switchChannel",
+      "reset",
+      "setIsReplace",
+      "fetchLiveList",
+      "getListChannels"
+    ],
+    "id": "liveList",
+    "stateKeys": [
+      "query",
+      "isError",
+      "categories",
+      "liveList",
+      "isReplace",
+      "pageStatus",
+      "isFetching",
+      "isActivityEnd",
+      "currentChannel",
+      "liveListWrapper",
+      "cancelFeedRequest",
+      "isFirstSuccessFetched"
+    ],
+    "type": "pinia"
+  },
+  {
+    "actions": [],
+    "id": "liveAbExp",
+    "stateKeys": [
+      "isLiveMode"
+    ],
+    "type": "pinia"
+  }
+]
