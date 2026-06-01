@@ -106,7 +106,7 @@ const conversationRepository = new ConversationRepository({
     runtimeDir,
     assistants: [genericAssistantDefinition, ...retainedAssistantDefinitions],
 });
-const skillsRegistry = new SkillsRegistry();
+const skillsRegistry = new SkillsRegistry({ baseDir: resolve(__dirname, "../skills") });
 const mcpRegistry = new McpRegistry();
 const externalIngress = new ExternalIngress({
     provider: runtimeConfig.provider,
