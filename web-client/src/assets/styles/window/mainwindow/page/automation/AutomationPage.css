@@ -1,0 +1,42 @@
+.automation-page {
+    display: flex; flex-direction: column; align-items: center;
+    justify-content: center; height: 100%; padding: 40px 24px;
+    background: var(--bg-primary, #fafbfc);
+}
+html.dark .automation-page { background: var(--bg-primary, #1a1a2e); }
+
+.automation-page__hero { text-align: center; margin-bottom: 36px; }
+.automation-page__title {
+    font-size: 26px; font-weight: 700; color: var(--text-primary, #1a1a2e); margin: 0 0 8px;
+}
+html.dark .automation-page__title { color: #e8e8ed; }
+.automation-page__desc {
+    font-size: 14px; color: var(--text-tertiary, #999); margin: 0;
+}
+
+.automation-page__grid {
+    display: flex; gap: 16px; flex-wrap: wrap; justify-content: center; max-width: 720px;
+}
+.automation-page__card {
+    display: flex; flex-direction: column; align-items: center; gap: 12px;
+    width: 200px; padding: 24px 16px; border-radius: 14px;
+    border: 1px solid var(--border-color, #e5e7eb);
+    background: var(--card-bg, #fff); cursor: pointer;
+    text-align: center; transition: all 0.15s;
+}
+.automation-page__card:hover {
+    border-color: #6366f1; box-shadow: 0 4px 12px rgba(99,102,241,0.1);
+}
+html.dark .automation-page__card {
+    background: rgba(255,255,255,0.03); border-color: rgba(255,255,255,0.06);
+}
+html.dark .automation-page__card:hover { border-color: #6366f1; }
+
+.automation-page__card-icon { font-size: 28px; }
+.automation-page__card-title {
+    font-size: 14px; font-weight: 600; color: var(--text-primary, #1a1a2e); margin-bottom: 4px;
+}
+html.dark .automation-page__card-title { color: #e8e8ed; }
+.automation-page__card-desc {
+    font-size: 12px; color: var(--text-tertiary, #999); line-height: 1.4;
+}

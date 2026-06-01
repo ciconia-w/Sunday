@@ -1,0 +1,30 @@
+import { readFile } from "node:fs/promises";
+
+const bundlePath = "/home/aaa/personal-agent-desktop/web-client/dist/assets/RootWindow-legacy.js";
+const bundle = await readFile(bundlePath, "utf8");
+
+const markers = [
+    "title-bar__brand-title",
+    "Sunday",
+    "AI 接管工作，每天都是周末",
+    "input-area__model-selector",
+];
+
+const present = Object.fromEntries(markers.map((marker) => [marker, bundle.includes(marker)]));
+const verdict = Object.values(present).every(Boolean)
+    ? "titlebar-shell-confirmed"
+    : "titlebar-shell-incomplete";
+
+console.log(
+    JSON.stringify(
+        {
+            bundlePath,
+            present,
+            verdict,
+        },
+        null,
+        2,
+    ),
+);
+
+process.exit(verdict === "titlebar-shell-confirmed" ? 0 : 1);

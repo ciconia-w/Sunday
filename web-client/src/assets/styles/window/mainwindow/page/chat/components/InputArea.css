@@ -1,0 +1,376 @@
+html {
+    --input-area-bg-color: rgba(255, 255, 255, 1);
+    --input-area-focused-bg: rgba(255, 255, 255, 0.65);
+    --input-area-focused-box-shadow: 0 0 0 1px var(--system-active-color-alpha-60), 0 6px 30px 2px rgba(0, 0, 0, 0.08);
+    --input-area-guidance-bg: rgba(0, 129, 255, 0.06);
+    --input-area-guidance-border: rgba(0, 129, 255, 0.14);
+    --input-area-guidance-title: rgba(0, 0, 0, 0.86);
+    --input-area-guidance-desc: rgba(0, 0, 0, 0.58);
+    --input-area-guidance-chip-bg: rgba(0, 0, 0, 0.05);
+    --input-area-guidance-chip-bg-hover: rgba(0, 0, 0, 0.08);
+    --input-area-guidance-chip-text: rgba(0, 0, 0, 0.76);
+    --input-area-guidance-chip-warning: rgba(199, 121, 0, 0.88);
+    --input-area-guidance-action-bg: rgba(255, 176, 32, 0.16);
+    --input-area-guidance-action-text: rgba(128, 76, 0, 0.95);
+    --input-area-guidance-success-bg: rgba(0, 129, 255, 0.1);
+    --input-area-guidance-success-text: rgba(0, 87, 170, 0.92);
+}
+html.dark {
+    --input-area-bg-color: rgba(255, 255, 255, 0.05);
+    --input-area-focused-bg: rgba(255, 255, 255, 0.1);
+    --input-area-focused-box-shadow:
+        0 0 0 1px var(--system-active-color-alpha-70), 0 3px 8px 5px rgba(0, 0, 0, 0.15), 0 1px 0 0 rgba(0, 0, 0, 0.5);
+    --input-area-guidance-bg: rgba(134, 202, 255, 0.08);
+    --input-area-guidance-border: rgba(134, 202, 255, 0.16);
+    --input-area-guidance-title: rgba(255, 255, 255, 0.9);
+    --input-area-guidance-desc: rgba(255, 255, 255, 0.62);
+    --input-area-guidance-chip-bg: rgba(255, 255, 255, 0.07);
+    --input-area-guidance-chip-bg-hover: rgba(255, 255, 255, 0.12);
+    --input-area-guidance-chip-text: rgba(255, 255, 255, 0.82);
+    --input-area-guidance-chip-warning: rgba(255, 196, 92, 0.92);
+    --input-area-guidance-action-bg: rgba(255, 176, 32, 0.14);
+    --input-area-guidance-action-text: rgba(255, 214, 143, 0.96);
+    --input-area-guidance-success-bg: rgba(134, 202, 255, 0.14);
+    --input-area-guidance-success-text: rgba(173, 222, 255, 0.94);
+}
+
+/* InputArea 组件样式 */
+
+.input-area {
+    width: 100%;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    min-height: 102px;
+    height: auto;
+    position: relative;
+    box-shadow:
+        0 0 0 1px rgba(0, 0, 0, 0.03),
+        0 4px 8px 1px rgba(0, 0, 0, 0.03);
+    border-radius: var(--radius-large);
+    background-color: var(--input-area-bg-color);
+    overflow: visible;
+}
+
+.input-area--dashed {
+    box-shadow: 0 4px 8px 1px rgba(0, 0, 0, 0.03);
+}
+
+.input-area--dashed::before {
+    content: "";
+    position: absolute;
+    inset: -1px;
+    border: 1px dashed var(--system-active-color-alpha-80);
+    border-radius: calc(var(--radius-large) + 1px);
+    pointer-events: none;
+}
+
+.input-area--focused {
+    background-color: var(--input-area-focused-bg);
+    box-shadow: var(--input-area-focused-box-shadow);
+}
+
+/* Attachment display area */
+.input-area__attachments {
+    width: 100%;
+    padding: 7px var(--spacing-md) var(--spacing-sm);
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+    position: relative;
+    z-index: 100;
+}
+
+.input-area__attachments-stack {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.input-area__file-guidance {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 12px;
+    border-radius: 14px;
+    background: var(--input-area-guidance-bg);
+    border: 1px solid var(--input-area-guidance-border);
+}
+
+.input-area__file-guidance-side {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+.input-area__file-guidance-copy {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.input-area__file-guidance-title {
+    color: var(--input-area-guidance-title);
+    font-size: var(--uosai-font-size-sm);
+    line-height: var(--uosai-line-height-tight);
+    font-weight: 600;
+}
+
+.input-area__file-guidance-desc {
+    color: var(--input-area-guidance-desc);
+    font-size: var(--uosai-font-size-xs);
+    line-height: var(--uosai-line-height-normal);
+}
+
+.input-area__file-guidance-stats {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 6px;
+}
+
+.input-area__file-guidance-stat {
+    display: inline-flex;
+    align-items: center;
+    padding: 5px 8px;
+    border-radius: 999px;
+    background: var(--input-area-guidance-chip-bg);
+    color: var(--input-area-guidance-chip-text);
+    font-size: var(--uosai-font-size-3xs);
+    line-height: var(--uosai-line-height-extra-tight);
+    font-weight: 600;
+}
+
+.input-area__file-guidance-stat--warning {
+    color: var(--input-area-guidance-chip-warning);
+}
+
+.input-area__file-guidance-actions {
+    display: flex;
+    justify-content: flex-end;
+}
+
+.input-area__file-guidance-action {
+    border: 0;
+    border-radius: 999px;
+    padding: 6px 10px;
+    background: transparent;
+    color: var(--input-area-guidance-desc);
+    cursor: pointer;
+    transition:
+        background-color 0.16s ease,
+        color 0.16s ease,
+        opacity 0.16s ease;
+    font-size: var(--uosai-font-size-3xs);
+    line-height: var(--uosai-line-height-extra-tight);
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.input-area__file-guidance-action:hover:enabled {
+    background: var(--input-area-guidance-chip-bg);
+    color: var(--input-area-guidance-chip-text);
+}
+
+.input-area__file-guidance-action:disabled {
+    opacity: 0.56;
+    cursor: not-allowed;
+}
+
+.input-area__failed-files-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 2px 2px 0;
+}
+
+.input-area__failed-files-copy {
+    min-width: 0;
+    color: var(--input-area-guidance-chip-warning);
+    font-size: var(--uosai-font-size-3xs);
+    line-height: var(--uosai-line-height-normal);
+}
+
+.input-area__failed-files-label {
+    font-weight: 600;
+}
+
+.input-area__failed-files-list {
+    margin-left: 4px;
+}
+
+.input-area__failed-files-action {
+    border: 0;
+    border-radius: 999px;
+    padding: 6px 10px;
+    background: var(--input-area-guidance-action-bg);
+    color: var(--input-area-guidance-action-text);
+    cursor: pointer;
+    transition:
+        opacity 0.16s ease,
+        transform 0.16s ease;
+    font-size: var(--uosai-font-size-3xs);
+    line-height: var(--uosai-line-height-extra-tight);
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.input-area__failed-files-action:hover:enabled {
+    transform: translateY(-1px);
+}
+
+.input-area__failed-files-action:disabled {
+    opacity: 0.56;
+    cursor: not-allowed;
+}
+
+.input-area__failed-files-feedback {
+    display: inline-flex;
+    align-items: center;
+    width: fit-content;
+    padding: 6px 10px;
+    border-radius: 999px;
+    background: var(--input-area-guidance-success-bg);
+    color: var(--input-area-guidance-success-text);
+    font-size: var(--uosai-font-size-3xs);
+    line-height: var(--uosai-line-height-extra-tight);
+    font-weight: 600;
+}
+
+.input-area__failed-files-feedback--bulk {
+    background: var(--input-area-guidance-chip-bg);
+    color: var(--input-area-guidance-chip-text);
+}
+
+.input-area__failed-files-feedback--retry {
+    background: var(--input-area-guidance-bg);
+    color: var(--input-area-guidance-chip-text);
+}
+
+.input-area__file-prompts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.input-area__file-prompt-chip-group {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.input-area__file-prompt-chip {
+    border: 0;
+    border-radius: 999px;
+    padding: 8px 12px;
+    background: var(--input-area-guidance-chip-bg);
+    color: var(--input-area-guidance-chip-text);
+    cursor: pointer;
+    transition:
+        background-color 0.16s ease,
+        transform 0.16s ease,
+        opacity 0.16s ease;
+    font-size: var(--uosai-font-size-xs);
+    line-height: var(--uosai-line-height-tight);
+    text-align: left;
+}
+
+.input-area__file-prompt-chip:hover:enabled {
+    background: var(--input-area-guidance-chip-bg-hover);
+    transform: translateY(-1px);
+}
+
+.input-area__file-prompt-chip:disabled {
+    opacity: 0.56;
+    cursor: not-allowed;
+}
+
+.input-area__file-prompt-fill {
+    width: 28px;
+    height: 28px;
+    border: 0;
+    border-radius: 999px;
+    background: var(--input-area-guidance-chip-bg);
+    color: var(--input-area-guidance-chip-text);
+    cursor: pointer;
+    transition:
+        background-color 0.16s ease,
+        transform 0.16s ease,
+        opacity 0.16s ease;
+    font-size: var(--uosai-font-size-sm);
+    line-height: 1;
+    font-weight: 600;
+}
+
+.input-area__file-prompt-fill:hover:enabled {
+    background: var(--input-area-guidance-chip-bg-hover);
+    transform: translateY(-1px);
+}
+
+.input-area__file-prompt-fill:disabled {
+    opacity: 0.56;
+    cursor: not-allowed;
+}
+
+.input-area__field {
+    width: 100%;
+    min-height: 60px;
+    max-height: 232px;
+    padding: 12px 16px;
+    font-size: var(--uosai-font-size-base);
+    line-height: var(--uosai-line-height-normal);
+    color: #333;
+    background-color: transparent;
+    border: none;
+    border-radius: 0;
+    resize: none;
+    outline: none;
+    font-family: inherit;
+    box-sizing: border-box;
+    /* overflow-y 由 TemplateEditor 内部 ScrollBar 组件负责 */
+}
+
+/* 当存在附件区时，输入区最大高度限制为 169px (12px padding top + 157px content.)*/
+.input-area__attachments + .input-area__field {
+    max-height: 169px;
+}
+
+.input-area__field::placeholder {
+    color: #bfbfbf;
+}
+
+.input-area__field:disabled {
+    background-color: transparent;
+    color: #bfbfbf;
+    cursor: not-allowed;
+}
+
+@media (max-width: 720px) {
+    .input-area__file-guidance {
+        flex-direction: column;
+    }
+
+    .input-area__file-guidance-side {
+        width: 100%;
+        align-items: flex-start;
+    }
+
+    .input-area__file-guidance-stats {
+        justify-content: flex-start;
+    }
+
+    .input-area__file-guidance-actions {
+        justify-content: flex-start;
+    }
+
+    .input-area__failed-files-row {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+}

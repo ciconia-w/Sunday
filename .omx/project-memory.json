@@ -1,0 +1,9 @@
+{
+  "notes": [
+    {
+      "category": "architecture",
+      "content": "参考仓库 Groveer/zeno：后续阶段优先借鉴 1) Memory Provider 抽象（本地记忆 + 外部 provider 生命周期钩子）；2) 上下文压缩 + Tool Carryover（保留文件/工具操作轨迹，不只总结文本）；3) allow/ask/deny 权限系统；4) rtk 作为 bash 输出压缩中间层（可选开启、失败 fallback）；5) 核心 agent 与 UI/ACP/MCP 协议解耦。暂不优先借鉴 TUI 设计与 Lua 配置体系。",
+      "timestamp": "2026-05-27T08:53:45.981Z"
+    }
+  ]
+}

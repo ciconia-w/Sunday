@@ -1,0 +1,12 @@
+{
+  "name": "personal-agent-desktop-pi-sidecar",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node ./src/dev-server.mjs"
+  },
+  "dependencies": {
+    "@earendil-works/pi-ai": "0.75.5",
+    "@earendil-works/pi-coding-agent": "0.75.5"
+  }
+}

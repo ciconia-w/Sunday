@@ -1,0 +1,92 @@
+html {
+    --title-bar-brand-title: rgba(0, 0, 0, 0.88);
+    --title-bar-brand-tagline: rgba(0, 0, 0, 0.5);
+    --title-bar-button-bg: rgba(0, 0, 0, 0.04);
+    --title-bar-button-bg-hover: rgba(0, 0, 0, 0.08);
+}
+
+html.dark {
+    --title-bar-brand-title: rgba(255, 255, 255, 0.9);
+    --title-bar-brand-tagline: rgba(255, 255, 255, 0.5);
+    --title-bar-button-bg: rgba(255, 255, 255, 0.06);
+    --title-bar-button-bg-hover: rgba(255, 255, 255, 0.12);
+}
+
+.title-bar {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 12px 0 10px;
+    user-select: none;
+    z-index: 100;
+    pointer-events: auto;
+    -webkit-app-region: drag;
+}
+
+.title-bar__brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+}
+
+.app-icon {
+    width: 24px;
+    height: 24px;
+    border-radius: 7px;
+    -webkit-app-region: no-drag;
+    flex-shrink: 0;
+}
+
+.title-bar__brand-copy {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    min-width: 0;
+}
+
+.title-bar__brand-title {
+    color: var(--title-bar-brand-title);
+    font-size: 14px;
+    line-height: 1;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+}
+
+.title-bar__brand-tagline {
+    color: var(--title-bar-brand-tagline);
+    font-size: 11px;
+    line-height: 1;
+    white-space: nowrap;
+}
+
+.title-bar__actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    -webkit-app-region: no-drag;
+}
+
+.title-bar__button {
+    background: var(--title-bar-button-bg) !important;
+    transition: background-color 0.18s ease;
+}
+
+.title-bar__button:hover {
+    background: var(--title-bar-button-bg-hover) !important;
+}
+
+@media (max-width: 720px) {
+    .title-bar {
+        padding-right: 8px;
+    }
+
+    .title-bar__brand-tagline {
+        display: none;
+    }
+}

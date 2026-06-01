@@ -1,0 +1,89 @@
+@import "../../components/ScrollBar.css";
+@import "./titlebar/WindowTitleBar.css";
+@import "./sidebar/WindowSidebar.css";
+@import "./footer/Footer.css";
+
+.main-window {
+    --sidebar-layout-transition-duration: 0.3s;
+    --sidebar-layout-transition-easing: cubic-bezier(0.4, 0, 0.2, 1);
+
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: row;
+    overflow: hidden;
+    position: relative;
+}
+
+.two-column-layout {
+    display: flex;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+}
+
+.content-body {
+    flex: 1;
+    overflow: auto;
+    /* 由于滚动条的原因，这里的宽度设置为100%，最大宽度由内部子组件控制， 各个子组件的 padding 都需要手动设置 */
+    /* padding: 20px 20px 10px 20px; */
+    /* max-width: 960px; */
+    width: 100%;
+}
+
+.runtime-status-badge {
+    position: absolute;
+    top: 52px;
+    right: 16px;
+    z-index: 30;
+    display: inline-flex;
+    align-items: center;
+    max-width: 320px;
+    padding: 6px 10px;
+    border-radius: 999px;
+    font-size: var(--uosai-font-size-xs);
+    line-height: 1;
+    font-weight: 600;
+    backdrop-filter: blur(8px);
+    box-shadow: 0 4px 18px rgba(0, 0, 0, 0.12);
+}
+
+.runtime-status-badge--remote-live {
+    color: #0b7a36;
+    background: rgba(217, 246, 224, 0.92);
+}
+
+.runtime-status-badge--remote-demo {
+    color: #9a4d00;
+    background: rgba(255, 235, 204, 0.94);
+}
+
+.runtime-status-badge--remote-unknown {
+    color: #005e8a;
+    background: rgba(214, 240, 255, 0.94);
+}
+
+.runtime-status-badge--local-mock {
+    color: #5a5a5a;
+    background: rgba(240, 240, 240, 0.92);
+}
+
+html.dark .runtime-status-badge--remote-live {
+    color: #8ce7a9;
+    background: rgba(17, 66, 34, 0.9);
+}
+
+html.dark .runtime-status-badge--remote-demo {
+    color: #ffd08a;
+    background: rgba(92, 54, 10, 0.9);
+}
+
+html.dark .runtime-status-badge--remote-unknown {
+    color: #9ad8ff;
+    background: rgba(10, 56, 84, 0.9);
+}
+
+html.dark .runtime-status-badge--local-mock {
+    color: #d8d8d8;
+    background: rgba(58, 58, 58, 0.9);
+}
