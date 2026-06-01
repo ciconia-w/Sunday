@@ -9,6 +9,7 @@ import { digitalHumanWorkspacePageDefinition } from "@/views/window/mainwindow/p
 import { automationWorkspacePageDefinition } from "@/views/window/mainwindow/page/automation/page";
 import { cliToolsWorkspacePageDefinition } from "@/views/window/mainwindow/page/clitools/page";
 import { unifiedExtensionsWorkspacePageDefinition } from "@/views/window/mainwindow/page/unifiedextensions/page";
+import { browserPanelPageDefinition } from "@/views/window/mainwindow/page/browserpanel/page";
 
 let isBuiltInWorkspacePagesRegistered = false;
 
@@ -22,6 +23,7 @@ export const ensureBuiltInWorkspacePagesRegistered = () => {
     registerMainWindowWorkspacePage(settingsHomeWorkspacePageDefinition);
     registerMainWindowWorkspacePage(modelSettingsWorkspacePageDefinition);
     registerMainWindowWorkspacePage(unifiedExtensionsWorkspacePageDefinition);
+    registerMainWindowWorkspacePage(browserPanelPageDefinition);
     registerMainWindowWorkspacePage(mcpServicesWorkspacePageDefinition);
     registerMainWindowWorkspacePage(skillsWorkspacePageDefinition);
     registerMainWindowWorkspacePage(cliToolsWorkspacePageDefinition);

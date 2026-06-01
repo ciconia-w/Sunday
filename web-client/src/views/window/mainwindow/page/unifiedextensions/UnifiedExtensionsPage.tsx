@@ -4,11 +4,13 @@ import { MAIN_WINDOW_WORKSPACE_PAGES } from "@/types/mainwindow";
 import SkillsPage from "@/views/window/mainwindow/page/settings/skills/SkillsPage";
 import CliToolsPage from "@/views/window/mainwindow/page/clitools/CliToolsPage";
 import McpServicesPage from "@/views/window/mainwindow/page/settings/mcpservices/McpServicesPage";
+import BrowserPanelPage from "@/views/window/mainwindow/page/browserpanel/BrowserPanelPage";
 import "@/assets/styles/window/mainwindow/page/settings/skills/SkillsPage.css";
 
 export default defineComponent({
     name: "UnifiedExtensionsPage",
     components: {
+        BrowserPanelPage,
         SkillsPage,
         CliToolsPage,
         McpServicesPage,
@@ -28,6 +30,10 @@ export default defineComponent({
             },
             {
                 id: MAIN_WINDOW_WORKSPACE_PAGES.MCP_SERVICES,
+            },
+            {
+                id: "browserPanel",
+                label: "浏览器",
                 label: "MCP",
             },
         ]);
@@ -74,6 +80,7 @@ export default defineComponent({
                 {this.activeTab === MAIN_WINDOW_WORKSPACE_PAGES.SKILLS && <SkillsPage />}
                 {this.activeTab === MAIN_WINDOW_WORKSPACE_PAGES.CLI_TOOLS && <CliToolsPage />}
                 {this.activeTab === MAIN_WINDOW_WORKSPACE_PAGES.MCP_SERVICES && <McpServicesPage />}
+                {this.activeTab === "browserPanel" && <BrowserPanelPage />}
             </div>
         );
     },
