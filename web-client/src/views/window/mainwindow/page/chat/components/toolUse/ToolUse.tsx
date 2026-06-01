@@ -359,6 +359,14 @@ export default defineComponent({
             getBashCommand(normalizedData.value.name, normalizedData.value.params),
         );
         const bashFullOutputPath = computed(() => normalizedData.value.fullOutputPath);
+
+        const screenshotPath = computed(() => {
+            const cmd = bashCommand.value;
+            if (!cmd || !cmd.includes("screenshot")) return "";
+            const resultText = collectTextFromToolValue(normalizedData.value.result);
+            const match = resultText.match(/\/(?:tmp|home)\/[^\s]+\.png/i);
+            return match ? match[0] : "";
+        });
         const formattedDetails = computed(() => {
             const parts: string[] = [];
 
@@ -449,6 +457,7 @@ export default defineComponent({
             toolTargetPath,
             bashCommand,
             bashFullOutputPath,
+            screenshotPath,
             formattedDetails,
             canCopy,
             canOpenTargetFile,
@@ -581,6 +590,7 @@ export default defineComponent({
                         <pre class="tool-use__code">{this.formattedDetails}</pre>
                     </div>
                 )}
+                {this.screenshotPath && <img src={"file://" + this.screenshotPath} class="tool-use__screenshot" style="max-width:100%;border-radius:8px;margin-top:8px;display:block" alt="Screenshot" />}
             </div>
         );
     },

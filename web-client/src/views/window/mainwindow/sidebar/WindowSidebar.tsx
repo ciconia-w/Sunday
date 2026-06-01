@@ -1,25 +1,32 @@
-import { computed, defineComponent } from "vue";
+import { computed, defineComponent, ref } from "vue";
 import { useBackendStore, useConversationManagerStore, useHistoryConversationStore, useMainWindowStore } from "@/stores";
 import { MAIN_WINDOW_WORKSPACE_PAGES } from "@/types/mainwindow";
 import { ConversationStatus } from "@/types/conversation";
 import { createDefaultConversation } from "@/utils/mainwindow/conversationActions";
 import BaseItem from "@/views/window/mainwindow/sidebar/components/BaseItem";
+import SvgIcon from "@/components/SvgIcon";
 import sundayLogo from "@/assets/sunday-brand-logo.png";
 import "@/assets/styles/window/mainwindow/sidebar/WindowSidebar.css";
 
 export default defineComponent({
     name: "WindowSidebar",
-    components: { BaseItem },
+    components: { BaseItem, SvgIcon },
     setup() {
         const b = useBackendStore();
         const m = useMainWindowStore();
         const cm = useConversationManagerStore();
         const hc = useHistoryConversationStore();
+        const c = computed(() => m.isSidebarCollapsed);
+
+        const ctxMenu = ref<{ visible: boolean; x: number; y: number; conversationId: string } | null>(null);
+        const showCtx = (conversationId: string, event: MouseEvent) => { event.preventDefault(); ctxMenu.value = { visible: true, x: event.clientX, y: event.clientY, conversationId }; };
+        const hideCtx = () => { ctxMenu.value = null; };
+        const delConvo = async (id: string) => { await cm.removeConversation(id); hideCtx(); };
+        document.addEventListener("click", hideCtx);
 
         return {
-            c: computed(() => m.isSidebarCollapsed),
-            toggle: () => m.toggleSidebarCollapse(),
-            sundayLogo,
+            c, toggle: () => m.toggleSidebarCollapse(), sundayLogo,
+            ctxMenu, showCtx, hideCtx, delConvo,
             newChatItem: computed(() => ({ id: "nc", type: "new-conversation", name: b.translate("新建对话"), icon: "icon_new_chat_v2", data: null })),
             wsItems: computed(() => [
                 { id: MAIN_WINDOW_WORKSPACE_PAGES.EXTENSIONS, type: "workspace", icon: "icon_extensions_v2", name: b.translate("扩展"), selected: m.workspacePage === MAIN_WINDOW_WORKSPACE_PAGES.EXTENSIONS, data: { workspacePage: MAIN_WINDOW_WORKSPACE_PAGES.EXTENSIONS } },
@@ -35,15 +42,10 @@ export default defineComponent({
         };
     },
     render() {
-        // Collapsed: fixed button at window left edge
-        if (this.c) {
-            return <button type="button" class="sbar-expand" onClick={this.toggle}>→</button>;
-        }
-        // Expanded: full sidebar
         return (
-            <div class="wsb">
-                <button type="button" class="sbar-collapse" onClick={this.toggle}>←</button>
-                <div class="wsb-body">
+            <div class={["wsb", this.c && "wsb--fold"]}>
+                {this.c ? <button type="button" class="sbar-expand" onClick={this.toggle}>→</button> : <div class="wsb-body">
+                    <button type="button" class="wsb-collapse-btn" onClick={this.toggle}>←</button>
                     <div class="wsb-brand">
                         <img src={this.sundayLogo} width="28" height="28" style="border-radius:6px" alt="Sunday" />
                         <div><div class="wsb-brand-name">Sunday</div><div class="wsb-brand-tag">桑迪接管工作，天天都是周末</div></div>
@@ -52,10 +54,13 @@ export default defineComponent({
                     <div class="wsb-nav">{this.wsItems.map((x: any) => <BaseItem key={x.id} item={x} onClick={() => this.goPage(x.data.workspacePage)} />)}</div>
                     <div class="wsb-convos">
                         <div class="wsb-convos-h"><span>{this.convoTitle}</span><button type="button" onClick={this.goHistory}>{this.historyLink}</button></div>
-                        {this.convoItems.length ? <div class="wsb-convos-l">{this.convoItems.map((x: any) => <BaseItem key={x.id} item={x} onClick={() => this.goConvo(x.id)} />)}</div> : <div class="wsb-convos-e">{this.emptyText}</div>}
+                        {this.convoItems.length ? <div class="wsb-convos-l">{this.convoItems.map((x: any) => <BaseItem key={x.id} item={x} onClick={() => this.goConvo(x.id)} onRightButtonClick={({ event }: any) => this.showCtx(x.id, event)} />)}</div> : <div class="wsb-convos-e">{this.emptyText}</div>}
                     </div>
                     <div class="wsb-foot"><BaseItem item={this.settingsItem} onClick={() => this.goPage(this.settingsItem.data.workspacePage)} /></div>
-                </div>
+                </div>}
+                {this.ctxMenu?.visible && <div class="wsb-ctxmenu" style={{ position: "fixed", left: this.ctxMenu.x + "px", top: this.ctxMenu.y + "px", zIndex: 9999 }}>
+                    <button type="button" onClick={() => this.delConvo(this.ctxMenu!.conversationId)}>删除对话</button>
+                </div>}
             </div>
         );
     },
