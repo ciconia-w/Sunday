@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-HOST_BIN="/tmp/personal-agent-host-build/personal-agent-host"
+HOST_BIN="$(bash "$ROOT_DIR/scripts/resolve-host-bin.sh" personal-agent-host)"
 STATIC_PORT="${PERSONAL_AGENT_STATIC_PORT:-4175}"
 SIDECAR_PORT="${PERSONAL_AGENT_SIDECAR_PORT:-8788}"
 FRONT_URL="${PERSONAL_AGENT_FRONT_URL:-http://127.0.0.1:${STATIC_PORT}/?assistant=uos-ai-writing&autoOpenRecentDoc=1#/}"

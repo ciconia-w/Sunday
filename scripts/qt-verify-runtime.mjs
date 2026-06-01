@@ -3,6 +3,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import net from "node:net";
+import { getSidecarDir, getWebDistDir, resolveHostBinary } from "./paths.mjs";
 
 export async function waitForHttp(url, timeoutMs = 10000) {
     const deadline = Date.now() + timeoutMs;
@@ -37,19 +38,28 @@ export async function stopListener(port) {
 export async function withQtVerifyRuntime(options, run) {
     const staticPort = options.staticPort;
     const sidecarPort = options.sidecarPort;
+    const webDistDir = getWebDistDir();
+    const sidecarDir = getSidecarDir();
+    const hostBin = await resolveHostBinary("personal-agent-host");
+
+    if (!hostBin) {
+        throw new Error(
+            "Unable to locate personal-agent-host. Set PERSONAL_AGENT_HOST_BIN or PERSONAL_AGENT_HOST_BUILD_DIR, or build into .build/host-qt.",
+        );
+    }
 
     await stopListener(staticPort);
     await stopListener(sidecarPort);
 
     const staticServer = spawn(
         "python3",
-        ["-m", "http.server", String(staticPort), "--directory", "/home/aaa/personal-agent-desktop/web-client/dist"],
+        ["-m", "http.server", String(staticPort), "--directory", webDistDir],
         { stdio: "ignore" },
     );
 
     const captureSidecarOutput = options.captureSidecarOutput === true;
     const sidecar = spawn("node", ["./src/dev-server.mjs"], {
-        cwd: "/home/aaa/personal-agent-desktop/pi-sidecar",
+        cwd: sidecarDir,
         env: {
             ...process.env,
             PERSONAL_AGENT_PROVIDER: "deepseek",
@@ -86,6 +96,7 @@ export async function withQtVerifyRuntime(options, run) {
                     profileDir,
                     smokeExitMs,
                     timeoutMs,
+                    hostBin,
                 }),
         });
     } finally {
@@ -95,10 +106,10 @@ export async function withQtVerifyRuntime(options, run) {
     }
 }
 
-async function runQtHost({ frontUrl, sidecarPort, profileDir, smokeExitMs, timeoutMs }) {
+async function runQtHost({ frontUrl, sidecarPort, profileDir, smokeExitMs, timeoutMs, hostBin }) {
     return await new Promise((resolve) => {
         const child = spawn(
-            "/tmp/personal-agent-host-build/personal-agent-host",
+            hostBin,
             [],
             {
                 env: {

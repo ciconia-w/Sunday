@@ -43,7 +43,7 @@
 Command:
 
 ```bash
-cd /home/aaa/personal-agent-desktop/web-client
+cd <repo-root>/web-client
 npm run build
 ```
 
@@ -57,7 +57,7 @@ Result:
 Command sequence:
 
 ```bash
-cd /home/aaa/personal-agent-desktop/pi-sidecar
+cd <repo-root>/pi-sidecar
 npm install --ignore-scripts
 node ./src/dev-server.mjs
 ```
@@ -135,7 +135,7 @@ Interpretation:
 Commands:
 
 ```bash
-cd /home/aaa/personal-agent-desktop/web-client
+cd <repo-root>/web-client
 npm run dev -- --host 127.0.0.1 --port 4173
 ```
 
@@ -177,7 +177,7 @@ Purpose:
 Build verification after adding the debug instrumentation:
 
 ```bash
-cd /home/aaa/personal-agent-desktop/web-client
+cd <repo-root>/web-client
 npm run build
 ```
 
@@ -235,7 +235,7 @@ Interpretation:
 Verification script:
 
 ```bash
-cd /home/aaa/personal-agent-desktop
+cd <repo-root>
 node ./scripts/verify-remote-demo.mjs
 ```
 

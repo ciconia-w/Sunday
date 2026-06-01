@@ -23,7 +23,7 @@
 export DEEPSEEK_API_KEY=...
 export PERSONAL_AGENT_PROVIDER=deepseek
 export PERSONAL_AGENT_MODEL=deepseek-chat
-cd /home/aaa/personal-agent-desktop/pi-sidecar
+cd <repo-root>/pi-sidecar
 node ./src/dev-server.mjs
 ```
 
@@ -43,7 +43,7 @@ node ./src/dev-server.mjs
 命令：
 
 ```bash
-cd /home/aaa/personal-agent-desktop
+cd <repo-root>
 npm run verify:conversation-api
 ```
 
@@ -56,7 +56,7 @@ npm run verify:conversation-api
 命令：
 
 ```bash
-cd /home/aaa/personal-agent-desktop
+cd <repo-root>
 npm run verify:workspace-api
 ```
 
@@ -77,7 +77,7 @@ npm run verify:workspace-api
 命令：
 
 ```bash
-cd /home/aaa/personal-agent-desktop
+cd <repo-root>
 npm run verify:host-qt-smoke
 ```
 
@@ -96,7 +96,7 @@ npm run verify:host-qt-smoke
 命令：
 
 ```bash
-cd /home/aaa/personal-agent-desktop
+cd <repo-root>
 npm run verify:host-qt-live
 ```
 
@@ -117,7 +117,7 @@ npm run verify:host-qt-live
 命令：
 
 ```bash
-cd /home/aaa/personal-agent-desktop
+cd <repo-root>
 npm run verify:system-channel
 ```
 
@@ -135,7 +135,7 @@ npm run verify:system-channel
 命令：
 
 ```bash
-cd /home/aaa/personal-agent-desktop
+cd <repo-root>
 npm run verify:file-channel
 ```
 
@@ -157,7 +157,7 @@ npm run verify:file-channel
 命令：
 
 ```bash
-cd /home/aaa/personal-agent-desktop
+cd <repo-root>
 npm run verify:host-qt-file-flow
 ```
 
@@ -177,7 +177,7 @@ npm run verify:host-qt-file-flow
 命令：
 
 ```bash
-cd /home/aaa/personal-agent-desktop
+cd <repo-root>
 npm run verify:host-qt-doc-open
 ```
 
@@ -196,7 +196,7 @@ npm run verify:host-qt-doc-open
 命令：
 
 ```bash
-cd /home/aaa/personal-agent-desktop
+cd <repo-root>
 npm run verify:host-qt-doc-save
 ```
 

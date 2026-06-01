@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
+import { getBuiltBundlePath } from "./paths.mjs";
 
-const bundlePath = "/home/aaa/personal-agent-desktop/web-client/dist/assets/RootWindow-legacy.js";
+const bundlePath = getBuiltBundlePath();
 const bundle = await readFile(bundlePath, "utf8");
 
 const markers = [

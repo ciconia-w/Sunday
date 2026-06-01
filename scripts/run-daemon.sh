@@ -6,7 +6,7 @@ SP=4190
 CP=8790
 PLAT="${QT_QPA_PLATFORM:-${DISPLAY:+xcb}}"
 PLAT="${PLAT:-offscreen}"
-HOST="/tmp/personal-agent-host-build/personal-agent-host"
+HOST="$(bash "$ROOT/scripts/resolve-host-bin.sh" personal-agent-host)"
 
 nohup bash -c "
 python3 -m http.server $SP --directory '$ROOT/web-client/dist' &

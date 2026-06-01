@@ -1,8 +1,16 @@
 {
   "name": "pi-agent-desktop-shell",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
   "scripts": {
+    "install:all": "npm install && cd web-client && npm install && cd ../pi-sidecar && npm install",
+    "build:web": "cd web-client && npm run build",
+    "typecheck:web": "cd web-client && npm run type-check",
+    "verify:repo": "node ./scripts/verify-repo.mjs",
     "cleanup:test-conversations": "node ./scripts/cleanup-test-conversations.mjs",
     "run:demo": "bash ./scripts/run-demo.sh",
     "run:daemon": "bash ./scripts/run-daemon.sh",
@@ -22,8 +30,8 @@
     "verify:mcp-api": "node ./scripts/verify-mcp-api.mjs",
     "verify:skills-api": "node ./scripts/verify-skills-api.mjs",
     "verify:ingress-api": "node ./scripts/verify-ingress-api.mjs",
-    "verify:system-channel": "QT_QPA_PLATFORM=offscreen QTWEBENGINE_DISABLE_SANDBOX=1 /tmp/personal-agent-host-build/personal-agent-systemchannel-smoke",
-    "verify:file-channel": "QT_QPA_PLATFORM=offscreen QTWEBENGINE_DISABLE_SANDBOX=1 /tmp/personal-agent-host-build/personal-agent-filechannel-smoke",
+    "verify:system-channel": "bash ./scripts/verify-system-channel.sh",
+    "verify:file-channel": "bash ./scripts/verify-file-channel.sh",
     "verify:mvp": "node ./scripts/verify-mvp.mjs",
     "verify:conversation-api": "node ./scripts/verify-conversation-api.mjs",
     "verify:workspace-api": "node ./scripts/verify-workspace-api.mjs",

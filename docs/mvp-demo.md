@@ -22,7 +22,7 @@ It is **not** a full clone of the earlier product matrix.
 
 ```bash
 export DEEPSEEK_API_KEY='...'
-cd /home/aaa/personal-agent-desktop
+cd <repo-root>
 npm run run:chat
 ```
 
@@ -38,7 +38,7 @@ Expected:
 
 ```bash
 export DEEPSEEK_API_KEY='...'
-cd /home/aaa/personal-agent-desktop
+cd <repo-root>
 npm run run:writing
 ```
 
@@ -52,7 +52,7 @@ Expected:
 ## One-Command MVP Verification
 
 ```bash
-cd /home/aaa/personal-agent-desktop
+cd <repo-root>
 npm run verify:mvp
 ```
 

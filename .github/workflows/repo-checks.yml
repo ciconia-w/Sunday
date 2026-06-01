@@ -1,0 +1,46 @@
+name: Repo Checks
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  repo-checks:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            web-client/package-lock.json
+            pi-sidecar/package-lock.json
+
+      - name: Install root dependencies
+        run: npm install
+
+      - name: Install web dependencies
+        working-directory: web-client
+        run: npm install
+
+      - name: Install sidecar dependencies
+        working-directory: pi-sidecar
+        run: npm install
+
+      - name: Repo verification
+        run: npm run verify:repo
+
+      - name: Web type check
+        working-directory: web-client
+        run: npm run type-check
+
+      - name: Web build
+        working-directory: web-client
+        run: npm run build

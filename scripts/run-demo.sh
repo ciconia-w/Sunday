@@ -10,7 +10,7 @@ if [[ -f "$ROOT_DIR/.env.local" ]]; then
 fi
 
 WEB_DIST_DIR="$ROOT_DIR/web-client/dist"
-HOST_BIN="/tmp/personal-agent-host-build/personal-agent-host"
+HOST_BIN="$(bash "$ROOT_DIR/scripts/resolve-host-bin.sh" personal-agent-host)"
 STATIC_PORT="${PERSONAL_AGENT_STATIC_PORT:-4174}"
 SIDECAR_PORT="${PERSONAL_AGENT_SIDECAR_PORT:-8787}"
 PROVIDER="${PERSONAL_AGENT_PROVIDER:-deepseek}"
@@ -31,7 +31,7 @@ fi
 
 if [[ ! -x "$HOST_BIN" ]]; then
   echo "missing host binary: $HOST_BIN" >&2
-  echo "build it first: cmake --build /tmp/personal-agent-host-build -j2" >&2
+  echo "build it first: cmake -S $ROOT_DIR/host-qt -B $ROOT_DIR/.build/host-qt && cmake --build $ROOT_DIR/.build/host-qt -j2" >&2
   exit 1
 fi
 

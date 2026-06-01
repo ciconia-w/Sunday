@@ -407,13 +407,13 @@ A minimal `host-qt` skeleton now exists in this repository with:
 This skeleton has passed a basic configuration check:
 
 ```bash
-cmake -S host-qt -B /tmp/personal-agent-host-build
+cmake -S host-qt -B .build/host-qt
 ```
 
 The skeleton now also passes a compile step:
 
 ```bash
-cmake --build /tmp/personal-agent-host-build -j2
+cmake --build .build/host-qt -j2
 ```
 
 That means the project has now entered the “native-shell preparation” stage rather than staying purely in frontend demo mode.
@@ -501,7 +501,7 @@ That limitation has now been partially lifted:
 The current `personal-agent-host` binary can now be launched against the frontend dev server with:
 
 ```bash
-PERSONAL_AGENT_AUTOSTART_SIDECAR=0 /tmp/personal-agent-host-build/personal-agent-host
+PERSONAL_AGENT_AUTOSTART_SIDECAR=0 .build/host-qt/personal-agent-host
 ```
 
 A lightweight timeout-based smoke run showed:

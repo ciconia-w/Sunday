@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { repoRoot } from "./paths.mjs";
 
 const steps = [
     {
@@ -217,7 +218,7 @@ function runStep(step) {
     return new Promise((resolve) => {
         const start = Date.now();
         const child = spawn(step.command, step.args, {
-            cwd: "/home/aaa/personal-agent-desktop",
+            cwd: repoRoot,
             env: process.env,
             stdio: ["ignore", "pipe", "pipe"],
         });

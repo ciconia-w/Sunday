@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import { readFile } from "node:fs/promises";
+import { getBuiltBundlePath, getSidecarDir, getWebDistDir, resolveHostBinary } from "./paths.mjs";
 
 async function waitForHttp(url, timeoutMs = 10000) {
     const deadline = Date.now() + timeoutMs;
@@ -20,15 +21,25 @@ async function waitForHttp(url, timeoutMs = 10000) {
 async function run() {
     const staticPort = 4174;
     const sidecarPort = 8787;
+    const webDistDir = getWebDistDir();
+    const sidecarDir = getSidecarDir();
+    const builtBundlePath = getBuiltBundlePath();
+    const hostBin = await resolveHostBinary("personal-agent-host");
+
+    if (!hostBin) {
+        throw new Error(
+            "Unable to locate personal-agent-host. Set PERSONAL_AGENT_HOST_BIN or PERSONAL_AGENT_HOST_BUILD_DIR, or build into .build/host-qt.",
+        );
+    }
 
     const staticServer = spawn(
         "python3",
-        ["-m", "http.server", String(staticPort), "--directory", "/home/aaa/personal-agent-desktop/web-client/dist"],
+        ["-m", "http.server", String(staticPort), "--directory", webDistDir],
         { stdio: "ignore" },
     );
 
     const sidecar = spawn("node", ["./src/dev-server.mjs"], {
-        cwd: "/home/aaa/personal-agent-desktop/pi-sidecar",
+        cwd: sidecarDir,
         env: {
             ...process.env,
             PERSONAL_AGENT_PROVIDER: "deepseek",
@@ -43,7 +54,7 @@ async function run() {
 
         const frontUrl = `http://127.0.0.1:${staticPort}/?disableResizeObservers=1#/`;
         const hostLog = await new Promise((resolve) => {
-            const child = spawn("/tmp/personal-agent-host-build/personal-agent-host", [], {
+            const child = spawn(hostBin, [], {
                 env: {
                     ...process.env,
                     QT_QPA_PLATFORM: "offscreen",
@@ -74,10 +85,7 @@ async function run() {
             });
         });
 
-        const builtBundle = await readFile(
-            "/home/aaa/personal-agent-desktop/web-client/dist/assets/RootWindow-legacy.js",
-            "utf8",
-        );
+        const builtBundle = await readFile(builtBundlePath, "utf8");
 
         const verdict =
             hostLog.includes("[host-qt web] loadFinished true") &&

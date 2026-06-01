@@ -31,6 +31,10 @@ int main(int argc, char *argv[])
     const QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
     const QString frontUrl = env.value(QStringLiteral("PERSONAL_AGENT_FRONT_URL"), QStringLiteral("http://127.0.0.1:4173"));
     const QString sidecarBaseUrl = env.value(QStringLiteral("PERSONAL_AGENT_SIDECAR_URL"), QStringLiteral("http://127.0.0.1:8787"));
+    const QString sidecarWorkingDir = env.value(
+        QStringLiteral("PERSONAL_AGENT_SIDECAR_WORKDIR"),
+        QDir::current().absoluteFilePath(QStringLiteral("../pi-sidecar"))
+    );
     const bool autoStartSidecar = env.value(QStringLiteral("PERSONAL_AGENT_AUTOSTART_SIDECAR"), QStringLiteral("1")) != QStringLiteral("0");
     const int smokeExitMs = env.value(QStringLiteral("PERSONAL_AGENT_SMOKE_EXIT_MS"), QStringLiteral("0")).toInt();
 
@@ -48,7 +52,7 @@ int main(int argc, char *argv[])
     SidecarSupervisor sidecar;
     sidecar.setProgram(QStringLiteral("node"));
     sidecar.setArguments(QStringList() << QStringLiteral("./src/dev-server.mjs"));
-    sidecar.setWorkingDirectory(QDir::homePath() + QStringLiteral("/personal-agent-desktop/pi-sidecar"));
+    sidecar.setWorkingDirectory(sidecarWorkingDir);
 
     int code = 0;
     {

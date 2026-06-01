@@ -3,6 +3,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import net from "node:net";
+import { getSidecarDir, getWebDistDir, resolveHostBinary } from "./paths.mjs";
 
 const staticPort = 4175;
 const sidecarPort = 8788;
@@ -73,9 +74,15 @@ function buildFrontUrl() {
 }
 
 async function runHost(frontUrl) {
+    const hostBin = await resolveHostBinary("personal-agent-host");
+    if (!hostBin) {
+        throw new Error(
+            "Unable to locate personal-agent-host. Set PERSONAL_AGENT_HOST_BIN or PERSONAL_AGENT_HOST_BUILD_DIR, or build into .build/host-qt.",
+        );
+    }
     return await new Promise((resolve) => {
         const child = spawn(
-            "/tmp/personal-agent-host-build/personal-agent-host",
+            hostBin,
             [],
             {
                 env: {
@@ -113,14 +120,17 @@ async function runHost(frontUrl) {
 await stopListener(staticPort);
 await stopListener(sidecarPort);
 
+const webDistDir = getWebDistDir();
+const sidecarDir = getSidecarDir();
+
 const staticServer = spawn(
     "python3",
-    ["-m", "http.server", String(staticPort), "--directory", "/home/aaa/personal-agent-desktop/web-client/dist"],
+    ["-m", "http.server", String(staticPort), "--directory", webDistDir],
     { stdio: "ignore" },
 );
 
 const sidecar = spawn("node", ["./src/dev-server.mjs"], {
-    cwd: "/home/aaa/personal-agent-desktop/pi-sidecar",
+    cwd: sidecarDir,
     env: {
         ...process.env,
         PERSONAL_AGENT_PROVIDER: "deepseek",

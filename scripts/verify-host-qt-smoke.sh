@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-HOST_BIN="/tmp/personal-agent-host-build/personal-agent-host"
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+HOST_BIN="$(bash "$ROOT_DIR/scripts/resolve-host-bin.sh" personal-agent-host)"
 FRONT_URL="${PERSONAL_AGENT_FRONT_URL:-http://127.0.0.1:4174/#/?autoSend=qt-smoke-static}"
 SIDECAR_URL="${PERSONAL_AGENT_SIDECAR_URL:-http://127.0.0.1:8787}"
 SMOKE_EXIT_MS="${PERSONAL_AGENT_SMOKE_EXIT_MS:-5000}"

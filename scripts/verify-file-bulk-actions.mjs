@@ -1,8 +1,8 @@
 import { readFile } from "node:fs/promises";
+import { getBuiltBundlePath } from "./paths.mjs";
 
-const bundlePath = "/home/aaa/personal-agent-desktop/web-client/dist/assets/RootWindow-legacy.js";
-const sourcePath =
-    "/home/aaa/personal-agent-desktop/web-client/src/views/window/mainwindow/page/chat/components/InputArea.tsx";
+const bundlePath = getBuiltBundlePath();
+const sourcePath = new URL("../web-client/src/views/window/mainwindow/page/chat/components/InputArea.tsx", import.meta.url);
 const bundle = await readFile(bundlePath, "utf8");
 const source = await readFile(sourcePath, "utf8");
 

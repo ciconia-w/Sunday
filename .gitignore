@@ -1,7 +1,29 @@
-node_modules
-dist
+node_modules/
+dist/
+.build/
+.cache/
+.tmp/
+.omx/
 .DS_Store
-.vite
+.vite/
 *.log
+*.tmp
+coverage/
 .env.local
-.pi-sidecar
+.env.*.local
+!.env.example
+
+# Local editor / OS state
+.idea/
+.vscode/
+Thumbs.db
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Qt / CMake outputs
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+compile_commands.json

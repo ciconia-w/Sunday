@@ -1,13 +1,15 @@
 import { spawn } from "node:child_process";
 import { stopListener, waitForHttp } from "./qt-verify-runtime.mjs";
+import { getSidecarDir } from "./paths.mjs";
 
 export async function withSidecarRuntime(options, run) {
     const sidecarPort = options.sidecarPort;
+    const sidecarDir = getSidecarDir();
 
     await stopListener(sidecarPort);
 
     const sidecar = spawn("node", ["./src/dev-server.mjs"], {
-        cwd: "/home/aaa/personal-agent-desktop/pi-sidecar",
+        cwd: sidecarDir,
         env: {
             ...process.env,
             PERSONAL_AGENT_PROVIDER: "deepseek",
@@ -21,6 +23,8 @@ export async function withSidecarRuntime(options, run) {
         await waitForHttp(`http://127.0.0.1:${sidecarPort}/state`);
         return await run({ sidecarPort });
     } finally {
-        sidecar.kill("SIGTERM");
+        if (!sidecar.killed) {
+            sidecar.kill("SIGTERM");
+        }
     }
 }
