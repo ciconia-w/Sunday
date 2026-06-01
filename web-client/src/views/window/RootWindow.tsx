@@ -74,6 +74,26 @@ export default defineComponent({
         const runtimeStatusStore = useRuntimeStatusStore();
 
         const maybeRunAutoFileFlow = async () => {
+
+        const checkUpdatesInBackground = async () => {
+            try {
+                const sundayRaw = (await backend.requestSystem("runCliCommand", "curl -s https://api.github.com/repos/ciconia-w/Sunday/releases/latest 2>/dev/null | python3 -c \"import sys,json; d=json.load(sys.stdin); print(d.get('tag_name',''))\" 2>/dev/null || echo ''")) as string;
+                const sundayLatest = sundayRaw.trim().replace(/^v/, "");
+                if (sundayLatest && sundayLatest !== "1.0.0") {
+                    notifyStore.showToast({ type: "info", message: `Sunday v${sundayLatest} available`, duration: 4000 });
+                }
+            } catch { /* silent */ }
+
+            try {
+                const opencliRaw = (await backend.requestSystem("runCliCommand", "opencli daemon status 2>/dev/null | grep Version | awk '{print $2}' | tr -d 'v' || echo ''")) as string;
+                const opencliCurrent = opencliRaw.trim();
+                const npmRaw = (await backend.requestSystem("runCliCommand", "npm view @jackwener/opencli version 2>/dev/null || echo ''")) as string;
+                const opencliLatest = npmRaw.trim();
+                if (opencliCurrent && opencliLatest && opencliCurrent !== opencliLatest) {
+                    notifyStore.showToast({ type: "info", message: `OpenCLI v${opencliLatest} available`, duration: 4000 });
+                }
+            } catch { /* silent */ }
+        };
             const url = new URL(window.location.href);
             const autoInjectFile = url.searchParams.get("autoInjectFile");
             const autoDeleteFile = url.searchParams.get("autoDeleteFile");
@@ -510,6 +530,9 @@ export default defineComponent({
 
             // 通知后端窗口初始化完成
             taskChannelStore.notifyWindowCreated(backend.taskChannel);
+
+            // 后台检查更新，不阻塞启动流程
+            checkUpdatesInBackground();
         });
 
         return {
