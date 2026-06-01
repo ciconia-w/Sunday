@@ -88,11 +88,18 @@ export default defineComponent({
 
         const installOpencliExtension = async () => {
             try {
-                await backendStore.requestSystem("runCliCommand", "opencli daemon restart 2>/dev/null; echo done");
-                notifyStore.showToast({ type: "info", message: "OpenCLI 已启动。请在 Chrome 中加载扩展程序。", duration: 4000 });
-                setTimeout(checkOpencliStatus, 2000);
+                const extPath = "/home/aaa/personal-agent-desktop/extensions/opencli-browser";
+                await backendStore.requestSystem("runCliCommand", "opencli daemon restart 2>/dev/null; sleep 1; opencli daemon status 2>/dev/null | grep -q connected && echo already-connected || echo need-install");
+                const status = (await backendStore.requestSystem("runCliCommand", "opencli daemon status 2>/dev/null | grep Extension || echo disconnected")) as string;
+                if (status.includes("connected")) {
+                    opencliStatus.value.extension = "已连接";
+                    notifyStore.showToast({ type: "success", message: "OpenCLI 插件已连接。", duration: 2000 });
+                } else {
+                    await backendStore.requestSystem("runCliCommand", `python3 -c "import pyperclip; pyperclip.copy('${extPath}')" 2>/dev/null; echo done`);
+                    notifyStore.showToast({ type: "info", message: "插件路径已复制。请打开 chrome://extensions → 开发者模式 → 加载已解压的扩展程序，选择 Sunday/extensions/opencli-browser", duration: 6000 });
+                }
             } catch {
-                notifyStore.showToast({ type: "error", message: "OpenCLI 启动失败。", duration: 2500 });
+                notifyStore.showToast({ type: "error", message: "OpenCLI 启动失败。请确认已安装 opencli: npm install -g @jackwener/opencli", duration: 3000 });
             }
         };
 

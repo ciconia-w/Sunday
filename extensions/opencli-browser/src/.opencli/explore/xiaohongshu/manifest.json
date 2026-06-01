@@ -1,0 +1,275 @@
+{
+  "site": "xiaohongshu",
+  "target_url": "https://www.xiaohongshu.com/explore/69b4416e000000001a0237f6",
+  "final_url": "https://www.xiaohongshu.com/404?source=/404/sec_XMpqhaMu?redirectPath=https%3A%2F%2Fwww.xiaohongshu.com%2Fexplore%2F69b4416e000000001a0237f6&error_code=300031&error_msg=%E5%BD%93%E5%89%8D%E7%AC%94%E8%AE%B0%E6%9A%82%E6%97%B6%E6%97%A0%E6%B3%95%E6%B5%8F%E8%A7%88&uuid=01ca27bb-658f-42af-a88f-c3c6e473d42d",
+  "title": "小红书 - 你访问的页面不见了",
+  "framework": {
+    "nextjs": false,
+    "nuxt": false,
+    "pinia": true,
+    "react": false,
+    "vue2": false,
+    "vue3": true,
+    "vuex": false
+  },
+  "stores": [
+    {
+      "type": "pinia",
+      "id": "user",
+      "actions": [
+        "getUserInfo",
+        "getUserFollow",
+        "getUserPageInfo",
+        "toFollow",
+        "unFollow",
+        "fetchNotes",
+        "onTouristLogin",
+        "updateFollowStatus",
+        "fetchProfilePageData",
+        "resetProfilePageData",
+        "toggleUserApiV2",
+        "getUIDByUrl",
+        "refreshUserBoard"
+      ]
+    },
+    {
+      "type": "pinia",
+      "id": "global",
+      "actions": [
+        "updateAppSettings",
+        "setFirstVisitUrl",
+        "setCurrentLayout",
+        "setFeedbackPopupVisible"
+      ]
+    },
+    {
+      "type": "pinia",
+      "id": "board",
+      "actions": [
+        "loadMoreBoardListData",
+        "getBoardFeeds",
+        "getBoardDetails",
+        "getBoardPageData"
+      ]
+    },
+    {
+      "type": "pinia",
+      "id": "UserFileStore",
+      "actions": [
+        "setUserFileListData",
+        "removeFile"
+      ]
+    },
+    {
+      "type": "pinia",
+      "id": "login",
+      "actions": [
+        "reset",
+        "openLogin",
+        "closeLogin",
+        "toggleAgree",
+        "toggleTooltip",
+        "clearPhone",
+        "updateQrData",
+        "setIsObPagesVisible",
+        "setObPageFillInProgress",
+        "beforeFillInGender",
+        "beforeFillInAge",
+        "afterFillInAge",
+        "setInSpamCheckSendAuthCode",
+        "reportUserInfo",
+        "getRegisterFusingConfig",
+        "handleLoginStep",
+        "setLogining",
+        "setRiskUser",
+        "setInAntiSpamCheckLogin",
+        "setInAntiSpamCheckSecurityCode"
+      ]
+    },
+    {
+      "type": "pinia",
+      "id": "feed",
+      "actions": [
+        "fetchFeeds",
+        "fetchFeedsOnServer",
+        "getLikeNum",
+        "reset",
+        "switchCategory",
+        "initMfStatistics",
+        "addReadFeedCount",
+        "addVisitTimes",
+        "getHomefeedCategory",
+        "getResourceInfo",
+        "toggleFeedsApiPrefetch",
+        "updatePrefetchId",
+        "clearPlaceholderFeeds",
+        "setIsUsingPlaceholderFeeds",
+        "setPlaceholderFeedsConsumed",
+        "setIsReplace",
+        "setImgNoteFilterStatus",
+        "updateCategory"
+      ]
+    },
+    {
+      "type": "pinia",
+      "id": "layout",
+      "actions": [
+        "resize"
+      ]
+    },
+    {
+      "type": "pinia",
+      "id": "aiAbExp",
+      "actions": []
+    },
+    {
+      "type": "pinia",
+      "id": "notification",
+      "actions": [
+        "getNotification",
+        "replyComment",
+        "getNotificationCount",
+        "exposeNotificationItem",
+        "reset"
+      ]
+    },
+    {
+      "type": "pinia",
+      "id": "search",
+      "actions": [
+        "loadMore",
+        "getSuggestions",
+        "updateKeywordFrom",
+        "initSuggestions",
+        "mutateSearchValue",
+        "getQueryTrending",
+        "getSugRecommend",
+        "setQueryTrendingWithBack",
+        "getUserLists",
+        "loadMoreUsers",
+        "resetFetchingStatus",
+        "clearHistoryList",
+        "deleteHistory",
+        "addHistory",
+        "getHistoryList",
+        "initHistory",
+        "searchPageCloseLoginBox",
+        "setHotspotSearch",
+        "checkHotspotStorageStatus",
+        "resetSearchFilter"
+      ]
+    },
+    {
+      "type": "pinia",
+      "id": "conversation",
+      "actions": [
+        "initAgent",
+        "ensureConnected",
+        "disconnect",
+        "setSetupPromise",
+        "createConversation",
+        "clearConversation",
+        "sendMessage",
+        "updateHistoryQuerys",
+        "getLonglinkAdapter",
+        "getCurrentRoundId",
+        "setCurrentActiveRoundId",
+        "getCurrentActiveRoundId"
+      ]
+    },
+    {
+      "type": "pinia",
+      "id": "traceSourceStore",
+      "actions": [
+        "getCurrentRound",
+        "openTraceSourceDrawer",
+        "closeTraceSourceDrawer",
+        "openTraceSourceKeywordDrawer",
+        "closeTraceSourceKeywordDrawer"
+      ]
+    },
+    {
+      "type": "pinia",
+      "id": "aiSugHistory",
+      "actions": [
+        "addHistory",
+        "deleteHistory",
+        "clearHistory"
+      ]
+    },
+    {
+      "type": "pinia",
+      "id": "AiGuideWords",
+      "actions": []
+    },
+    {
+      "type": "pinia",
+      "id": "AiSugDataForChat",
+      "actions": [
+        "getGuideWordsData"
+      ]
+    },
+    {
+      "type": "pinia",
+      "id": "activity",
+      "actions": [
+        "openActivity",
+        "closePanel",
+        "setEntryInfo",
+        "getEntryInfo",
+        "openActivityPanel",
+        "setExposed",
+        "isExposed",
+        "getGlobalConfig",
+        "getJumpType"
+      ]
+    },
+    {
+      "type": "pinia",
+      "id": "note",
+      "actions": [
+        "getImageListByNoteId",
+        "getTrackDataByNoteId",
+        "reset",
+        "updateNoteByNoteId",
+        "getNoteDetailByNoteId",
+        "collectServerRequestError",
+        "getDefaultNoteId",
+        "deleteNoteDetailByNoteId",
+        "setCurrentNoteId",
+        "setRoute",
+        "updateMediaWidth",
+        "updateHeight",
+        "updateWidthAndHeight"
+      ]
+    },
+    {
+      "type": "pinia",
+      "id": "nioStore",
+      "actions": [
+        "getCollectionList",
+        "getFeedFetchedInfo",
+        "getFeedFetchNotesInfo",
+        "setFeedFetchedInfo"
+      ]
+    },
+    {
+      "type": "pinia",
+      "id": "liveList",
+      "actions": [
+        "switchChannel",
+        "reset",
+        "setIsReplace",
+        "fetchLiveList",
+        "getListChannels"
+      ]
+    },
+    {
+      "type": "pinia",
+      "id": "liveAbExp",
+      "actions": []
+    }
+  ],
+  "top_strategy": "public",
+  "explored_at": "2026-03-20T00:56:25.500Z"
+}

@@ -1,0 +1,16 @@
+{
+  "site": "chromewebdata",
+  "target_url": "xiaohongshu.com",
+  "final_url": "chrome-error://chromewebdata/",
+  "title": "chrome-extension://dngcalhjjbmacjfndgpdhipjpikmimjd/xiaohongshu.com",
+  "framework": {
+    "nextjs": false,
+    "nuxt": false,
+    "react": false,
+    "vue2": false,
+    "vue3": false
+  },
+  "stores": [],
+  "top_strategy": "public",
+  "explored_at": "2026-03-20T00:56:04.196Z"
+}
