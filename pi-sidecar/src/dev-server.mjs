@@ -364,7 +364,18 @@ const server = createServer(async (_req, res) => {
                     } else {
                         const parsed = body.params ? JSON.parse(body.params) : null;
                         await conversationRepository.trackOutgoingPayload(parsed);
-                        await sessionBridge.sendMessage(body.params);
+                        const sessionPromise = sessionBridge.sendMessage(body.params);
+                        sessionPromise.catch((error) => {
+                            emitSession(
+                                3,
+                                parsed?.session_id ?? randomUUID(),
+                                JSON.stringify({
+                                    error: -1,
+                                    error_message: error instanceof Error ? error.message : String(error),
+                                }),
+                            );
+                            console.error("[dev-server] background /session/send failed:", error);
+                        });
                     }
                 } else if (_req.url === "/session/retry") {
                     if (runtimeConfig.mode === "demo") {

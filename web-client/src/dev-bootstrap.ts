@@ -15,6 +15,11 @@ declare global {
 }
 
 async function injectRemoteChannels() {
+    if (typeof window !== "undefined" && (window as any).qt?.webChannelTransport) {
+        document.body.setAttribute("data-runtime-channel-source", "qt-webchannel");
+        return;
+    }
+
     const baseUrl = "";
     window.__UOS_PI_CHANNELS__ = await createRemoteInjectedChannels(baseUrl);
     document.body.setAttribute("data-runtime-channel-source", "remote");

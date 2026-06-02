@@ -275,6 +275,9 @@ export class ConversationRecord {
         };
         this.setMessage(this._tempAnswerMessageId, newMessage); // 添加新的 AI 消息
         this.isFromHistory = false; // 标记当前会话不是从历史记录中恢复的
+        // 发送后立刻触发一次状态变更，确保空的 assistant 占位消息也能立即渲染出 loading 态，
+        // 而不是等首个流式文本分片到达后界面才出现变化。
+        this.emitConversationStateChange();
     }
 
     // ============================================================

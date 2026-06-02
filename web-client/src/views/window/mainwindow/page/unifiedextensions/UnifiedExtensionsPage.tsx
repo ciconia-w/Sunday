@@ -30,11 +30,11 @@ export default defineComponent({
             },
             {
                 id: MAIN_WINDOW_WORKSPACE_PAGES.MCP_SERVICES,
+                label: "MCP",
             },
             {
-                id: "browserPanel",
+                id: MAIN_WINDOW_WORKSPACE_PAGES.BROWSER_PANEL,
                 label: "浏览器",
-                label: "MCP",
             },
         ]);
 
@@ -80,7 +80,7 @@ export default defineComponent({
                 {this.activeTab === MAIN_WINDOW_WORKSPACE_PAGES.SKILLS && <SkillsPage />}
                 {this.activeTab === MAIN_WINDOW_WORKSPACE_PAGES.CLI_TOOLS && <CliToolsPage />}
                 {this.activeTab === MAIN_WINDOW_WORKSPACE_PAGES.MCP_SERVICES && <McpServicesPage />}
-                {this.activeTab === "browserPanel" && <BrowserPanelPage />}
+                {this.activeTab === MAIN_WINDOW_WORKSPACE_PAGES.BROWSER_PANEL && <BrowserPanelPage />}
             </div>
         );
     },

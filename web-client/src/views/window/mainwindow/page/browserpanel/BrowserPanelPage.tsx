@@ -10,14 +10,24 @@ export default defineComponent({
         const state = ref({ url: "", title: "", interactive: 0, session: "sunday" });
         const busy = ref(false);
         const statusText = ref("检测中...");
+        const extensionPath = "/home/aaa/personal-agent-desktop/extensions/opencli-browser";
+
+        const runBrowserCommand = async (command: string) => {
+            return (await backend.requestSystem(
+                "runCliCommand",
+                `${command} 2>/dev/null || true`,
+            )) as string;
+        };
 
         const checkStatus = async () => {
             busy.value = true;
             try {
-                const raw = (await backend.requestSystem("runCliCommand", "opencli daemon status 2>/dev/null | grep -E 'Daemon:|Extension:' | tr '\\n' ' ' || echo 'not-running'")) as string;
+                const raw = await runBrowserCommand(
+                    "opencli daemon status | grep -E 'Daemon:|Extension:' | tr '\\n' ' ' || echo 'not-running'",
+                );
                 statusText.value = raw.includes("running") && raw.includes("connected") 
                     ? "OpenCLI 已连接" : raw.includes("running") ? "插件未连接" : "守护进程未运行";
-                const st = (await backend.requestSystem("runCliCommand", "opencli browser sunday state 2>/dev/null || echo '{}'")) as string;
+                const st = await runBrowserCommand("opencli browser sunday state || echo '{}'");
                 try {
                     const d = JSON.parse(st);
                     if (d.data) {
@@ -34,14 +44,36 @@ export default defineComponent({
 
         onMounted(() => { setTimeout(checkStatus, 500); });
 
+        const initSession = async () => {
+            busy.value = true;
+            try {
+                await runBrowserCommand("opencli browser sunday init");
+                statusText.value = "浏览器会话已初始化";
+                setTimeout(checkStatus, 1200);
+            } catch {
+                statusText.value = "初始化失败";
+            } finally {
+                busy.value = false;
+            }
+        };
+
         const openUrl = async (url: string) => {
             await backend.requestSystem("runCliCommand", `opencli browser sunday open ${url} 2>/dev/null; echo done`);
             setTimeout(checkStatus, 1500);
         };
 
+        const copyExtensionPath = async () => {
+            await backend.requestSystem(
+                "runCliCommand",
+                `python3 -c "import pyperclip; pyperclip.copy('${extensionPath}')" 2>/dev/null; echo done`,
+            );
+        };
+
         return { state, busy, statusText, checkStatus, openUrl,
+            initSession, copyExtensionPath,
             titleText: computed(() => "浏览器"),
-            subtitleText: computed(() => "通过 OpenCLI 控制 Chrome 浏览器。") };
+            subtitleText: computed(() => "通过 OpenCLI 管理 Sunday 浏览器会话。"),
+            sessionLabel: computed(() => state.value.session || "sunday") };
     },
     render() {
         return (
@@ -63,13 +95,15 @@ export default defineComponent({
                             <div style="font-size:14px;font-weight:600;margin-bottom:4px">会话状态</div>
                             <div style="font-size:12px;color:var(--text-tertiary,#999)">{this.statusText}</div>
                             <div style="margin-top:8px;font-size:12px">
-                                URL: {this.state.url || "无"}<br/>标题: {this.state.title || "无"}<br/>可交互: {this.state.interactive} 个元素
+                                Session: {this.sessionLabel}<br/>URL: {this.state.url || "无"}<br/>标题: {this.state.title || "无"}<br/>可交互: {this.state.interactive} 个元素
                             </div>
                         </div>
                         <div style="display:flex;gap:8px;flex-wrap:wrap">
+                            <CommonButton text="初始化会话" variant="primary" onClick={this.initSession} />
                             <CommonButton text="打开 Example" variant="default" onClick={() => this.openUrl("https://example.com")} />
                             <CommonButton text="打开百度" variant="default" onClick={() => this.openUrl("https://www.baidu.com")} />
                             <CommonButton text="打开 GitHub" variant="default" onClick={() => this.openUrl("https://github.com")} />
+                            <CommonButton text="复制插件路径" variant="default" onClick={this.copyExtensionPath} />
                         </div>
                     </div></div>
                 </div>

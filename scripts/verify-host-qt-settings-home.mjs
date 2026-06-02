@@ -4,7 +4,7 @@ await verifyHostQtWorkspace({
     workspace: "settingsHome",
     staticPort: 4178,
     sidecarPort: 8792,
-    expectedBundleMarkers: ["核心设置", "扩展中心", "外观"],
+    expectedBundleMarkers: ["运行诊断", "模型配置", "扩展中心", "外观"],
     verdictConfirmed: "host-qt-settings-home-confirmed",
     verdictIncomplete: "host-qt-settings-home-incomplete",
 });

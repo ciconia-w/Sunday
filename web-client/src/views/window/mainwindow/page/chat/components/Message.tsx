@@ -1333,6 +1333,12 @@ export default defineComponent({
                                             );
                                             const shouldAppendLoading =
                                                 this.shouldShowLoading(msg) && isLastItem && !hasActiveReasoning;
+                                            const shouldTreatAsEmptyStreamingPlaceholder =
+                                                this.shouldShowLoading(msg) &&
+                                                isLastItem &&
+                                                !hasActiveReasoning &&
+                                                item.data.content === "" &&
+                                                onlyTextItems.length === 1;
 
                                             return (
                                                 <MarkdownRenderer
@@ -1340,7 +1346,7 @@ export default defineComponent({
                                                     content={item.data.content}
                                                     isUser={false}
                                                     showLoading={shouldAppendLoading}
-                                                    isOnlyEmptyTextItem={false}
+                                                    isOnlyEmptyTextItem={shouldTreatAsEmptyStreamingPlaceholder}
                                                 />
                                             );
                                         }

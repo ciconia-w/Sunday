@@ -273,7 +273,7 @@ export default defineComponent({
             if (shouldUsePlainTextStreaming.value) {
                 const escapedContent = escapeHtml(props.content).replace(/\n/g, "<br />");
                 const loadingHtml = props.isOnlyEmptyTextItem
-                    ? '<span class="waiting-loading-indicator"><span class="waiting-dot"></span><span class="waiting-dot"></span><span class="waiting-dot"></span></span>'
+                    ? '<span class="waiting-loading-indicator"><span class="waiting-loading-label">正在思考</span><span class="waiting-dot"></span><span class="waiting-dot"></span><span class="waiting-dot"></span></span>'
                     : '<span class="message-loading-indicator"><span class="loading-dot"></span><span class="loading-dot"></span><span class="loading-dot"></span></span>';
 
                 return `${escapedContent}${loadingHtml}`;
