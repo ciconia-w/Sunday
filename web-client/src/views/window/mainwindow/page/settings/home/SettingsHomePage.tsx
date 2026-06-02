@@ -167,6 +167,7 @@ export default defineComponent({
             sundayUpdate, opencliUpdate, checkSundayUpdate, checkOpencliUpdate, updateOpencli, updateSunday,
             openModelSettings: () => mainWindowStore.openWorkspacePage(MAIN_WINDOW_WORKSPACE_PAGES.MODEL_SETTINGS),
             openExtensions: () => mainWindowStore.openWorkspacePage(MAIN_WINDOW_WORKSPACE_PAGES.EXTENSIONS),
+            openBrowserPanel: () => mainWindowStore.openExtensionsPage(MAIN_WINDOW_WORKSPACE_PAGES.BROWSER_PANEL),
         };
     },
     render() {
@@ -245,6 +246,13 @@ export default defineComponent({
                                 <CommonButton text={this.opencliChecking ? "检测中..." : "安装插件"} variant="primary"
                                     onClick={this.installOpencliExtension} />
                             )}
+                        </div>
+                        <div class="settings-page__row">
+                            <div>
+                                <div class="settings-page__row-title">浏览器会话</div>
+                                <div class="settings-page__row-desc">打开 Sunday 浏览器面板，查看会话状态并初始化。</div>
+                            </div>
+                            <CommonButton text="打开面板" variant="default" onClick={this.openBrowserPanel} />
                         </div>
                         <CommonButton text="刷新状态" variant="default" onClick={this.checkOpencliStatus}
                             style="margin-top:8px" />

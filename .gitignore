@@ -27,3 +27,5 @@ CMakeFiles/
 CMakeCache.txt
 cmake_install.cmake
 compile_commands.json
+.pi-sidecar/
+pi-sidecar/.pi-sidecar/

@@ -73,8 +73,6 @@ export default defineComponent({
         const networkStore = useNetworkStore();
         const runtimeStatusStore = useRuntimeStatusStore();
 
-        const maybeRunAutoFileFlow = async () => {
-
         const checkUpdatesInBackground = async () => {
             try {
                 const sundayRaw = (await backend.requestSystem("runCliCommand", "curl -s https://api.github.com/repos/ciconia-w/Sunday/releases/latest 2>/dev/null | python3 -c \"import sys,json; d=json.load(sys.stdin); print(d.get('tag_name',''))\" 2>/dev/null || echo ''")) as string;
@@ -94,6 +92,20 @@ export default defineComponent({
                 }
             } catch { /* silent */ }
         };
+
+        const startBrowserSession = async () => {
+            try {
+                await backend.requestSystem(
+                    "runCliCommand",
+                    "opencli browser sunday init 2>/dev/null; echo done",
+                );
+                logSmoke("[RootWindow] browser session started");
+            } catch {
+                /* silent */
+            }
+        };
+
+        const maybeRunAutoFileFlow = async () => {
             const url = new URL(window.location.href);
             const autoInjectFile = url.searchParams.get("autoInjectFile");
             const autoDeleteFile = url.searchParams.get("autoDeleteFile");
@@ -533,6 +545,8 @@ export default defineComponent({
 
             // 后台检查更新，不阻塞启动流程
             checkUpdatesInBackground();
+            // 2.2: 自动创建浏览器会话
+            startBrowserSession();
         });
 
         return {

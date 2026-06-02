@@ -1536,6 +1536,14 @@ html.dark .markdown-content .table-body::after {
     background-color: transparent;
     padding: 0;
     margin: 0;
+    gap: 6px;
+}
+
+.waiting-loading-label {
+    font-size: 13px;
+    line-height: 1;
+    color: var(--text-tertiary, #8b8b8b);
+    letter-spacing: 0.02em;
 }
 
 .waiting-dot {
