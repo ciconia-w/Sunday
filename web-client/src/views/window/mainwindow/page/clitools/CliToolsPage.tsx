@@ -1,12 +1,16 @@
 import { computed, defineComponent, ref } from "vue";
 import TextButton from "@/components/TextButton";
 import ToolManagementList from "@/views/window/mainwindow/page/settings/common/components/ToolManagementList";
-import { useBackendStore } from "@/stores";
+import { useBackendStore, useNotifyStore } from "@/stores";
 import { convertCliToolToToolItem, type CliToolItem } from "@/views/window/mainwindow/page/settings/common/types";
 import "@/assets/styles/window/mainwindow/page/settings/skills/SkillsPage.css";
 
 interface CliToolRuntimeItem extends CliToolItem {
     statusToken: string;
+    detailText?: string;
+    actionText?: string;
+    actionDisabled?: boolean;
+    actionCommand?: string;
 }
 
 const DEFAULT_TOOLS: CliToolItem[] = [
@@ -24,6 +28,7 @@ export default defineComponent({
     components: { ToolManagementList, TextButton },
     setup() {
         const backendStore = useBackendStore();
+        const notifyStore = useNotifyStore();
         const cliTools = ref<CliToolRuntimeItem[]>(
             cached
                 ? [...cached]
@@ -65,13 +70,40 @@ export default defineComponent({
             setTimeout(refreshAll, 3000);
         };
 
+        const handleRunAction = async (toolId: string) => {
+            const targetTool = cliTools.value.find((item) => item.id === toolId);
+            const actionCommand = String(targetTool?.actionCommand || "").trim();
+
+            if (!targetTool?.actionText || !actionCommand) {
+                void refreshAll();
+                return;
+            }
+
+            try {
+                await backendStore.requestSystem("runCliCommand", actionCommand);
+                notifyStore.showToast({
+                    type: "success",
+                    message: `${targetTool.name}：${targetTool.actionText}`,
+                    duration: 1800,
+                });
+            } catch (error) {
+                notifyStore.showToast({
+                    type: "error",
+                    message: error instanceof Error ? error.message : "执行 CLI 动作失败，请稍后重试。",
+                    duration: 2600,
+                });
+            }
+
+            setTimeout(refreshAll, 3000);
+        };
+
         return {
             titleText: computed(() => "CLI 工具"),
             subtitleText: computed(() => "命令行工具能力，后续将演进为 CLI 商店。"),
             refreshText: computed(() => loading.value ? "检测中..." : "刷新状态"),
             cliToolItems: computed(() => cliTools.value.map(convertCliToolToToolItem)),
             loading,
-            handleToggle, refreshAll,
+            handleToggle, handleRunAction, refreshAll,
         };
     },
     render() {
@@ -101,6 +133,7 @@ export default defineComponent({
                                 showEditButton={false}
                                 loadingText="正在检测 CLI 工具..."
                                 emptyText="暂无 CLI 工具。"
+                                onRunItemAction={this.handleRunAction}
                                 onToggleItem={this.handleToggle}
                             />
                         </div>

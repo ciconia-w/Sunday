@@ -50,6 +50,7 @@ export default defineComponent({
         toggleItem: (_itemId: string, _enabled: boolean) => true,
         editItem: (_itemId: string) => true,
         deleteItem: (_itemId: string) => true,
+        runItemAction: (_itemId: string) => true,
     },
 
     setup(props, { emit }) {
@@ -207,6 +208,14 @@ export default defineComponent({
             props.customAction?.onClick(props.item, event);
         };
 
+        const handleRunAction = () => {
+            if (props.item.actionDisabled || !props.item.actionText) {
+                return;
+            }
+
+            emit("runItemAction", props.item.id);
+        };
+
         onMounted(() => {
             nextTick(() => {
                 updateDescriptionOverflowState();
@@ -247,6 +256,7 @@ export default defineComponent({
             handleEdit,
             handleDelete,
             handleCustomAction,
+            handleRunAction,
         };
     },
 
@@ -355,10 +365,27 @@ export default defineComponent({
                             </div>
                         </div>
                     )}
+
+                    {this.$props.item.actionText && (
+                        <div class="tool-management-list-item__action-row">
+                            <button
+                                class={[
+                                    "tool-management-list-item__action-button",
+                                    this.$props.item.actionDisabled && "tool-management-list-item__action-button--disabled",
+                                ]}
+                                type="button"
+                                onClick={this.handleRunAction}
+                                disabled={this.$props.item.actionDisabled}
+                            >
+                                {this.$props.item.actionText}
+                            </button>
+                        </div>
+                    )}
                 </div>
 
                 <Switch
                     value={this.$props.item.enabled}
+                    disabled={this.$props.item.toggleDisabled}
                     onChange={this.handleToggleChange}
                 />
             </div>

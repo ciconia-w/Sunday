@@ -41,6 +41,7 @@ export default defineComponent({
         toggleItem: (_itemId: string, _enabled: boolean) => true,
         editItem: (_itemId: string) => true,
         deleteItem: (_itemId: string) => true,
+        runItemAction: (_itemId: string) => true,
     },
 
     setup(props, { emit }) {
@@ -56,10 +57,15 @@ export default defineComponent({
             emit("deleteItem", itemId);
         };
 
+        const handleRunItemAction = (itemId: string) => {
+            emit("runItemAction", itemId);
+        };
+
         return {
             handleToggleItem,
             handleEditItem,
             handleDeleteItem,
+            handleRunItemAction,
         };
     },
 
@@ -78,6 +84,7 @@ export default defineComponent({
                                     showEditButton={this.$props.showEditButton}
                                     onDeleteItem={this.handleDeleteItem}
                                     onEditItem={this.handleEditItem}
+                                    onRunItemAction={this.handleRunItemAction}
                                     onToggleItem={this.handleToggleItem}
                                 />
                             </div>

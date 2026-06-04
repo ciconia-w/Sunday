@@ -45,6 +45,10 @@ await withSidecarRuntime(
             skillsData.ok === true &&
             Array.isArray(skillsData.result) &&
             skillsData.result.length > 0 &&
+            typeof firstSkill?.path === "string" &&
+            firstSkill.path.length > 0 &&
+            typeof firstSkill?.description === "string" &&
+            firstSkill.description.trim() !== "---" &&
             toggleResult?.ok === true &&
             hasResult?.ok === true &&
             typeof hasResult?.result === "boolean" &&

@@ -105,11 +105,21 @@ await withSidecarRuntime(
         const matches = Object.fromEntries(
             Object.entries(expected).map(([id, token]) => [id, byId[id]?.statusToken === token]),
         );
+        const metadataChecks = Object.fromEntries(
+            endpointItems.map((item) => [
+                item.id,
+                typeof item?.detailText === "string" &&
+                    item.detailText.length > 0 &&
+                    typeof item?.actionText === "string" &&
+                    typeof item?.actionDisabled === "boolean",
+            ]),
+        );
 
         const verdict =
             endpointResult?.ok === true &&
             endpointItems.length === 3 &&
-            Object.values(matches).every(Boolean)
+            Object.values(matches).every(Boolean) &&
+            Object.values(metadataChecks).every(Boolean)
                 ? "cli-tools-api-confirmed"
                 : "cli-tools-api-incomplete";
 
@@ -120,6 +130,7 @@ await withSidecarRuntime(
                     endpointItems,
                     expected,
                     matches,
+                    metadataChecks,
                     verdict,
                 },
                 null,
