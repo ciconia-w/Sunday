@@ -1,10 +1,8 @@
-import { withQtVerifyRuntime } from "./qt-verify-runtime.mjs";
+import { withSidecarRuntime } from "./sidecar-verify-runtime.mjs";
 
-await withQtVerifyRuntime(
+await withSidecarRuntime(
     {
-        staticPort: 4177,
         sidecarPort: 8791,
-        profilePrefix: "personal-agent-cleanup-",
     },
     async ({ sidecarPort }) => {
         const postToRuntime = async (path, body) => {

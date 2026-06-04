@@ -2,6 +2,13 @@ import { createHmac, randomUUID } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 
+const SUPPORTED_REPLY_TRANSPORTS = [
+    "webhook",
+    "lark-bot-webhook",
+    "slack-webhook",
+    "discord-webhook",
+];
+
 function normalizeRouteValue(value, fallback) {
     const normalized = typeof value === "string" ? value.trim() : "";
     return normalized || fallback;
@@ -57,7 +64,19 @@ function normalizeReplyTransport(value) {
         return "slack-webhook";
     }
 
+    if (normalized === "discord-incoming-webhook") {
+        return "discord-webhook";
+    }
+
     return normalized;
+}
+
+export function normalizeBackgroundReplayMode(value) {
+    return value === "service" ? "service" : "in-process";
+}
+
+export function getBackgroundReplayServiceStatusPath(runtimeDir) {
+    return resolve(runtimeDir, "external-ingress-replay-service-status.json");
 }
 
 function normalizeReplyTarget(body) {
@@ -71,7 +90,7 @@ function normalizeReplyTarget(body) {
         return null;
     }
 
-    if (replyTransport && !["webhook", "lark-bot-webhook", "slack-webhook"].includes(replyTransport)) {
+    if (replyTransport && !SUPPORTED_REPLY_TRANSPORTS.includes(replyTransport)) {
         throw new Error(`Unsupported replyTransport: ${replyTransport}`);
     }
 
@@ -173,7 +192,7 @@ function formatPlainTextReply(payload) {
 }
 
 function buildSupportedReplyTransports() {
-    return ["webhook", "lark-bot-webhook", "slack-webhook"];
+    return [...SUPPORTED_REPLY_TRANSPORTS];
 }
 
 function wait(ms) {
@@ -190,11 +209,15 @@ export class ExternalIngress {
         this.routeStorePath = resolve(options.runtimeDir, "external-ingress-routes.json");
         this.deadLetterPath = resolve(options.runtimeDir, "external-ingress-dead-letters.json");
         this.replayQueuePath = resolve(options.runtimeDir, "external-ingress-replay-queue.json");
+        this.backgroundReplayServiceStatusPath = getBackgroundReplayServiceStatusPath(options.runtimeDir);
         this.replyRetryDelaysMs = normalizeRetryDelays(
             process.env.PERSONAL_AGENT_INGRESS_REPLY_RETRY_DELAYS_MS,
             [1000, 3000],
         );
         this.backgroundReplayEnabled = String(process.env.PERSONAL_AGENT_INGRESS_BACKGROUND_REPLAY_ENABLED ?? "1") !== "0";
+        this.backgroundReplayMode = normalizeBackgroundReplayMode(
+            String(process.env.PERSONAL_AGENT_INGRESS_BACKGROUND_REPLAY_MODE ?? "in-process").trim(),
+        );
         this.backgroundReplayDelaysMs = normalizeRetryDelays(
             process.env.PERSONAL_AGENT_INGRESS_BACKGROUND_REPLAY_DELAYS_MS,
             [30000, 120000, 300000],
@@ -208,6 +231,7 @@ export class ExternalIngress {
         this.sessionQueues = new Map();
         this.activeSessionJobs = new Map();
         this.processingReplayEntryIds = new Set();
+        this.backgroundReplayServiceSupervisorStateProvider = null;
         this.backgroundReplayLoopRunning = false;
         this.backgroundReplayTimer = null;
         this.readyPromise = null;
@@ -272,7 +296,7 @@ export class ExternalIngress {
     }
 
     startBackgroundReplayLoop() {
-        if (!this.backgroundReplayEnabled || this.backgroundReplayTimer) {
+        if (!this.backgroundReplayEnabled || this.usesDedicatedBackgroundReplayService() || this.backgroundReplayTimer) {
             return;
         }
 
@@ -285,6 +309,14 @@ export class ExternalIngress {
         if (typeof this.backgroundReplayTimer.unref === "function") {
             this.backgroundReplayTimer.unref();
         }
+    }
+
+    usesDedicatedBackgroundReplayService() {
+        return this.backgroundReplayEnabled && this.backgroundReplayMode === "service";
+    }
+
+    setBackgroundReplayServiceSupervisorStateProvider(provider) {
+        this.backgroundReplayServiceSupervisorStateProvider = typeof provider === "function" ? provider : null;
     }
 
     getStoredReplyTarget(routeKey) {
@@ -402,9 +434,87 @@ export class ExternalIngress {
         };
     }
 
+    async getBackgroundReplayServiceStatus() {
+        const enabled = this.usesDedicatedBackgroundReplayService();
+        const baseStatus = {
+            enabled,
+            running: false,
+            pid: 0,
+            restartCount: 0,
+            startedAt: "",
+            lastHeartbeatAt: "",
+            lastRunAt: "",
+            lastError: "",
+        };
+
+        let fileStatus = {};
+        try {
+            const raw = await readFile(this.backgroundReplayServiceStatusPath, "utf8");
+            const parsed = JSON.parse(raw);
+            fileStatus = {
+                running: parsed?.running === true,
+                pid: normalizeNonNegativeInteger(parsed?.pid, 0),
+                startedAt: typeof parsed?.startedAt === "string" ? parsed.startedAt : "",
+                lastHeartbeatAt: typeof parsed?.lastHeartbeatAt === "string" ? parsed.lastHeartbeatAt : "",
+                lastRunAt: typeof parsed?.lastRunAt === "string" ? parsed.lastRunAt : "",
+                lastError: typeof parsed?.lastError === "string" ? parsed.lastError : "",
+            };
+        } catch {
+            fileStatus = {};
+        }
+
+        const supervisorStatus = this.backgroundReplayServiceSupervisorStateProvider
+            ? (this.backgroundReplayServiceSupervisorStateProvider() ?? {})
+            : {};
+
+        const merged = {
+            ...baseStatus,
+            ...fileStatus,
+            ...supervisorStatus,
+            enabled,
+            pid: normalizeNonNegativeInteger(supervisorStatus?.pid ?? fileStatus?.pid, 0),
+            restartCount: normalizeNonNegativeInteger(supervisorStatus?.restartCount, 0),
+            startedAt: typeof (fileStatus?.startedAt ?? supervisorStatus?.startedAt) === "string"
+                ? (fileStatus?.startedAt ?? supervisorStatus?.startedAt)
+                : "",
+            lastHeartbeatAt: typeof (fileStatus?.lastHeartbeatAt ?? supervisorStatus?.lastHeartbeatAt) === "string"
+                ? (fileStatus?.lastHeartbeatAt ?? supervisorStatus?.lastHeartbeatAt)
+                : "",
+            lastRunAt: typeof (fileStatus?.lastRunAt ?? supervisorStatus?.lastRunAt) === "string"
+                ? (fileStatus?.lastRunAt ?? supervisorStatus?.lastRunAt)
+                : "",
+            lastError: typeof (supervisorStatus?.lastError ?? fileStatus?.lastError) === "string"
+                ? (supervisorStatus?.lastError ?? fileStatus?.lastError)
+                : "",
+        };
+
+        if (!enabled) {
+            return merged;
+        }
+
+        const lastHeartbeatAtMs = Date.parse(merged.lastHeartbeatAt);
+        const heartbeatFresh = Number.isFinite(lastHeartbeatAtMs)
+            && (Date.now() - lastHeartbeatAtMs) <= Math.max(this.backgroundReplayPollMs * 4, 5000);
+
+        return {
+            ...merged,
+            running: Boolean(merged.pid) && heartbeatFresh,
+        };
+    }
+
     async getOperatorState(options = {}) {
         const routes = await this.listReplyRoutes();
         const replayQueue = await this.getReplayQueue(options);
+        const backgroundReplayServiceStatus = await this.getBackgroundReplayServiceStatus();
+
+        let runtimeNote = "background replay 已关闭。";
+        if (this.backgroundReplayEnabled && this.backgroundReplayMode === "service") {
+            runtimeNote = backgroundReplayServiceStatus.running
+                ? "当前 background replay 由 dedicated replay service 驱动；sidecar 继续保有 route / replay queue 与 operator API。"
+                : "当前 background replay 已切到 dedicated replay service 模式，但 worker 暂未进入稳定运行态。";
+        } else if (this.backgroundReplayEnabled) {
+            runtimeNote = "当前 background replay worker 仍运行在 sidecar 进程内；更强的 delivery reliability 仍需要 dedicated replay service。";
+        }
 
         return {
             routes,
@@ -418,11 +528,11 @@ export class ExternalIngress {
                 enabled: this.backgroundReplayEnabled,
                 pollMs: this.backgroundReplayPollMs,
                 delaysMs: [...this.backgroundReplayDelaysMs],
-                mode: "in-process",
-                hasDedicatedReplayService: false,
+                mode: this.backgroundReplayMode,
+                hasDedicatedReplayService: this.backgroundReplayMode === "service",
+                serviceStatus: backgroundReplayServiceStatus,
             },
-            runtimeNote:
-                "当前 background replay worker 仍运行在 sidecar 进程内；更强的 delivery reliability 仍需要 dedicated replay service。",
+            runtimeNote,
         };
     }
 
@@ -706,6 +816,12 @@ export class ExternalIngress {
         };
     }
 
+    buildDiscordReplyBody(payload) {
+        return {
+            content: formatPlainTextReply(payload),
+        };
+    }
+
     async postGenericWebhookReply(replyTarget, payload) {
         const response = await fetch(replyTarget.url, {
             method: "POST",
@@ -763,6 +879,29 @@ export class ExternalIngress {
 
         if (!response.ok) {
             throw new Error(`Slack webhook returned HTTP ${response.status}`);
+        }
+
+        return {
+            ok: true,
+            transport: replyTarget.transport,
+            status: response.status,
+            providerPayload: body,
+        };
+    }
+
+    async postDiscordWebhookReply(replyTarget, payload) {
+        const body = this.buildDiscordReplyBody(payload);
+        const response = await fetch(replyTarget.url, {
+            method: "POST",
+            headers: {
+                "content-type": "application/json; charset=utf-8",
+                ...replyTarget.headers,
+            },
+            body: JSON.stringify(body),
+        });
+
+        if (!response.ok) {
+            throw new Error(`Discord webhook returned HTTP ${response.status}`);
         }
 
         return {
@@ -971,6 +1110,10 @@ export class ExternalIngress {
 
         if (replyTarget.transport === "slack-webhook") {
             return this.postSlackWebhookReply(replyTarget, payload);
+        }
+
+        if (replyTarget.transport === "discord-webhook") {
+            return this.postDiscordWebhookReply(replyTarget, payload);
         }
 
         throw new Error(`Unsupported reply transport: ${replyTarget.transport}`);

@@ -45,6 +45,8 @@
     "verify:skills-import-source": "node ./scripts/verify-skills-import-source.mjs",
     "verify:ingress-api": "node ./scripts/verify-ingress-api.mjs",
     "verify:ingress-background-replay-api": "node ./scripts/verify-ingress-background-replay-api.mjs",
+    "verify:ingress-dedicated-replay-service-api": "node ./scripts/verify-ingress-dedicated-replay-service-api.mjs",
+    "verify:ingress-discord-api": "node ./scripts/verify-ingress-discord-api.mjs",
     "verify:ingress-lark-api": "node ./scripts/verify-ingress-lark-api.mjs",
     "verify:ingress-operator-api": "node ./scripts/verify-ingress-operator-api.mjs",
     "verify:ingress-operator-service-config-api": "node ./scripts/verify-ingress-operator-service-config-api.mjs",

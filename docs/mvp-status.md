@@ -132,9 +132,11 @@ Date: 2026-06-03
   - webhook route 的 sidecar runtime 持久化与重载
   - `lark-bot-webhook` / `feishu-bot-webhook` provider-specific reply adapter
   - `slack-webhook` provider-specific reply adapter
+  - `discord-webhook` / `discord-incoming-webhook` provider-specific reply adapter
   - 最小 reply retry / dead-letter 落盘
   - persisted replay queue
-  - in-process background replay worker
+  - `in-process` 与 `service` 两种 background replay 模式
+  - dedicated replay service heartbeat/status 落盘：`external-ingress-replay-service-status.json`
   - sidecar operator API：
     - `get-reply-routes`
     - `get-replay-queue`
@@ -232,7 +234,7 @@ Date: 2026-06-03
 4. IM bridge refinement:
    - provider-specific ingress integration
    - 更多 provider-specific push/reply adapter
-   - dedicated replay service / 更强 delivery reliability
+   - dedicated replay service 从 sidecar 子进程进一步演进到真正独立服务
 5. 然后再进入更大的扩展平台方向：
    - extension install / market flows
    - architecture / performance cleanup

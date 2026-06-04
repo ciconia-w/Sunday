@@ -111,6 +111,23 @@ Sunday 当前提供一个 sidecar 级别的外部消息入站协议：
 - 不额外引入 secret / 签名字段
 - 继续复用相同的 route store
 
+### Provider-specific adapter: Discord webhook
+
+当前还支持一条 Discord reply transport：
+
+- `replyTransport = discord-webhook`
+- `replyTransport = discord-incoming-webhook`（兼容别名，内部会归一化为 `discord-webhook`）
+- `replyWebhookUrl = https://discord.com/api/webhooks/...`
+
+这条 adapter 会把 Sunday 的 reply 转成 Discord webhook 的最小 `content` payload。
+
+当前保持最小实现：
+
+- 成功时发送 assistant 文本
+- 失败时发送 `Sunday 处理失败：...`
+- 不额外引入 secret / 签名字段
+- 继续复用相同的 route store
+
 ## Reply Webhook Payload
 
 成功回推示例：
@@ -164,7 +181,7 @@ Sunday 当前提供一个 sidecar 级别的外部消息入站协议：
 约束：
 
 - 当前只支持 `http` / `https` webhook
-- 当前 provider-specific transport 只落了飞书自定义机器人 webhook
+- 当前 provider-specific transport 已覆盖飞书/Lark、Slack 和 Discord 的最小 webhook reply adapter
 - 更复杂的 IM 平台桥接应继续叠在 generic webhook / lark bot webhook 这层 adapter 之上
 
 ## Delivery Reliability
@@ -213,13 +230,25 @@ reply queue 现在已经有最小 background replay worker。
 当前相关环境变量：
 
 - `PERSONAL_AGENT_INGRESS_BACKGROUND_REPLAY_ENABLED`
+- `PERSONAL_AGENT_INGRESS_BACKGROUND_REPLAY_MODE`
 - `PERSONAL_AGENT_INGRESS_BACKGROUND_REPLAY_DELAYS_MS`
 - `PERSONAL_AGENT_INGRESS_BACKGROUND_REPLAY_POLL_MS`
 
-当前这个 worker 仍然是最小实现：
+当前支持两种模式：
 
-- 只在 sidecar 进程内运行
-- 没有独立任务队列服务
+- `in-process`：worker 运行在 sidecar 进程内
+- `service`：worker 运行在独立 replay service 子进程中，但 queue / route 的所有权仍保留在 sidecar
+
+当 `PERSONAL_AGENT_INGRESS_BACKGROUND_REPLAY_MODE=service` 时：
+
+- sidecar 会拉起 `ingress-replay-worker.mjs`
+- replay service 会通过 sidecar operator API 轮询 queue 并执行自动重放
+- service heartbeat 会写入 runtime 目录下的：
+  - `external-ingress-replay-service-status.json`
+
+当前这个 dedicated replay service 仍然是最小实现：
+
+- 不是独立部署服务，而是 sidecar 管理的 worker 子进程
 - 没有 UI 级 pause / resume / replay history
 - delivery policy 仍是固定 delay，不是指数退避
 
@@ -397,6 +426,35 @@ npm run verify:ingress-background-replay-api
 - persisted replay queue
 - sidecar 重启后的 background replay
 - 自动重放成功后的 delivered 状态
+
+Discord verifier：
+
+```bash
+cd <repo-root>
+npm run verify:ingress-discord-api
+```
+
+这条 verifier 当前会验证：
+
+- `discord-webhook` / `discord-incoming-webhook` transport
+- provider payload 使用 `content`
+- route store 中的 transport 归一化
+- follow-up 不重复携带 webhook 仍可复用已持久化 route
+
+dedicated replay service verifier：
+
+```bash
+cd <repo-root>
+npm run verify:ingress-dedicated-replay-service-api
+```
+
+这条 verifier 当前会验证：
+
+- `PERSONAL_AGENT_INGRESS_BACKGROUND_REPLAY_MODE=service`
+- operator state 暴露 dedicated replay service 状态
+- replay worker PID 与 sidecar PID 分离
+- 自动重放由独立 replay worker 驱动并更新 delivered 状态
+- `external-ingress-replay-service-status.json` heartbeat 落盘
 
 operator surface verifier：
 

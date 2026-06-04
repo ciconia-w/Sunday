@@ -93,6 +93,16 @@ QJsonObject defaultIngressOperatorState()
         {QStringLiteral("delaysMs"), QJsonArray()},
         {QStringLiteral("mode"), QStringLiteral("in-process")},
         {QStringLiteral("hasDedicatedReplayService"), false},
+        {QStringLiteral("serviceStatus"), QJsonObject{
+            {QStringLiteral("enabled"), false},
+            {QStringLiteral("running"), false},
+            {QStringLiteral("pid"), 0},
+            {QStringLiteral("restartCount"), 0},
+            {QStringLiteral("startedAt"), QString()},
+            {QStringLiteral("lastHeartbeatAt"), QString()},
+            {QStringLiteral("lastRunAt"), QString()},
+            {QStringLiteral("lastError"), QString()},
+        }},
     };
     QJsonObject replyRetryPolicy{
         {QStringLiteral("maxAttempts"), 1},
@@ -106,6 +116,7 @@ QJsonObject defaultIngressOperatorState()
             QStringLiteral("webhook"),
             QStringLiteral("lark-bot-webhook"),
             QStringLiteral("slack-webhook"),
+            QStringLiteral("discord-webhook"),
         }},
         {QStringLiteral("replyRetryPolicy"), replyRetryPolicy},
         {QStringLiteral("backgroundReplay"), backgroundReplay},

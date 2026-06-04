@@ -1,12 +1,96 @@
 import { withSidecarRuntime } from "./sidecar-verify-runtime.mjs";
 
-async function post(path, body) {
-    const response = await fetch(`http://127.0.0.1:8787${path}`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(body ?? {}),
+const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function createEventCollector(baseUrl) {
+    const watchedSessionIds = new Set();
+    const events = [];
+    const decoder = new TextDecoder();
+    const controller = new AbortController();
+    let buffer = "";
+    let stopReading = false;
+
+    const eventResponse = await fetch(`${baseUrl}/events`, {
+        signal: controller.signal,
     });
-    return response.json();
+    const reader = eventResponse.body.getReader();
+    const readLoop = (async () => {
+        try {
+            while (!stopReading) {
+                const { value, done } = await reader.read();
+                if (done) {
+                    break;
+                }
+
+                buffer += decoder.decode(value, { stream: true });
+                let chunkEndIndex = -1;
+                while ((chunkEndIndex = buffer.indexOf("\n\n")) >= 0) {
+                    const chunk = buffer.slice(0, chunkEndIndex);
+                    buffer = buffer.slice(chunkEndIndex + 2);
+                    const dataLine = chunk.split("\n").find((line) => line.startsWith("data: "));
+                    if (!dataLine) {
+                        continue;
+                    }
+
+                    const parsed = JSON.parse(dataLine.slice(6));
+                    if (watchedSessionIds.size > 0 && !watchedSessionIds.has(parsed.sessionId)) {
+                        continue;
+                    }
+
+                    events.push(parsed);
+                }
+            }
+        } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            if (!stopReading && error?.name !== "AbortError" && !/terminated/i.test(message)) {
+                throw error;
+            }
+        }
+    })();
+
+    return {
+        events,
+        watchedSessionIds,
+        async close() {
+            stopReading = true;
+            controller.abort();
+            await reader.cancel().catch(() => undefined);
+            await readLoop.catch(() => undefined);
+        },
+    };
+}
+
+async function waitForSessionFinish(events, sessionId, timeoutMs = 45000) {
+    const deadline = Date.now() + timeoutMs;
+
+    while (Date.now() < deadline) {
+        const sessionEvents = events.filter((evt) => evt.sessionId === sessionId);
+        const finishEvent = sessionEvents.find((evt) => evt.event === 2);
+        const errorEvent = sessionEvents.find((evt) => evt.event === 3);
+
+        if (errorEvent) {
+            return {
+                ok: false,
+                reason: "session-error",
+                sessionEvents,
+            };
+        }
+
+        if (finishEvent) {
+            return {
+                ok: true,
+                sessionEvents,
+            };
+        }
+
+        await wait(250);
+    }
+
+    return {
+        ok: false,
+        reason: "timeout",
+        sessionEvents: events.filter((evt) => evt.sessionId === sessionId),
+    };
 }
 
 await withSidecarRuntime({ sidecarPort: 8787 }, async ({ sidecarPort }) => {
@@ -20,7 +104,21 @@ await withSidecarRuntime({ sidecarPort: 8787 }, async ({ sidecarPort }) => {
     };
 
     const initialState = await fetch(`http://127.0.0.1:${sidecarPort}/state`).then((response) => response.json());
-    const targetModelId = "deepseek-v4-flash";
+    const availableModels = Array.isArray(initialState.modelsByAssistant?.["uos-ai-generic"])
+        ? initialState.modelsByAssistant["uos-ai-generic"]
+        : [];
+    const initialCurrentModelId = typeof initialState.currentModelId === "string" ? initialState.currentModelId.trim() : "";
+    const normalizedInitialModelId = initialCurrentModelId.startsWith("deepseek/")
+        ? initialCurrentModelId.slice("deepseek/".length)
+        : initialCurrentModelId;
+    const preferredSwitchOrder = ["deepseek-v4-pro", "deepseek-v4-flash"];
+    const targetModelId =
+        preferredSwitchOrder.find((modelId) =>
+            modelId !== normalizedInitialModelId
+            && availableModels.some((model) => model.id === `deepseek/${modelId}`),
+        )
+        || preferredSwitchOrder.find((modelId) => availableModels.some((model) => model.id === `deepseek/${modelId}`))
+        || "deepseek-v4-pro";
 
     const switchResult = await postToRuntime("/assistant/set-current-model", {
         assistantId: "uos-ai-generic",
@@ -47,51 +145,16 @@ await withSidecarRuntime({ sidecarPort: 8787 }, async ({ sidecarPort }) => {
         },
     };
 
-    const controller = new AbortController();
-    const response = await fetch(`http://127.0.0.1:${sidecarPort}/events`, { signal: controller.signal });
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = "";
-    let done = false;
-    const events = [];
-
-    const readLoop = (async () => {
-        while (!done) {
-            const { value, done: streamDone } = await reader.read();
-            if (streamDone) break;
-            buffer += decoder.decode(value, { stream: true });
-            let idx;
-            while ((idx = buffer.indexOf("\n\n")) >= 0) {
-                const chunk = buffer.slice(0, idx);
-                buffer = buffer.slice(idx + 2);
-                const dataLine = chunk.split("\n").find((line) => line.startsWith("data: "));
-                if (!dataLine) continue;
-                const evt = JSON.parse(dataLine.slice(6));
-                if (evt.sessionId !== sessionId) continue;
-                events.push(evt);
-                if (evt.event === 2 || evt.event === 3) {
-                    done = true;
-                    controller.abort();
-                    break;
-                }
-            }
-        }
-    })().catch((error) => {
-        if (!String(error).includes("AbortError")) throw error;
-    });
+    const collector = await createEventCollector(`http://127.0.0.1:${sidecarPort}`);
+    collector.watchedSessionIds.add(sessionId);
 
     const sendResult = await postToRuntime("/session/send", {
         params: JSON.stringify(payload),
     });
+    const cycle = await waitForSessionFinish(collector.events, sessionId);
+    await collector.close();
 
-    const deadline = Date.now() + 45000;
-    while (!done && Date.now() < deadline) {
-        await new Promise((resolve) => setTimeout(resolve, 250));
-    }
-    controller.abort();
-    await readLoop;
-
-    const textParts = events
+    const textParts = collector.events
         .filter((evt) => evt.event === 4)
         .map((evt) => {
             try {
@@ -108,11 +171,11 @@ await withSidecarRuntime({ sidecarPort: 8787 }, async ({ sidecarPort }) => {
 
     const verdict =
         Array.isArray(initialState.modelsByAssistant?.["uos-ai-generic"]) &&
-        initialState.modelsByAssistant["uos-ai-generic"].some((model) => model.id === "deepseek/deepseek-v4-flash") &&
+        initialState.modelsByAssistant["uos-ai-generic"].some((model) => model.id === `deepseek/${targetModelId}`) &&
         switchResult?.result === true &&
-        updatedState.currentModelId === "deepseek/deepseek-v4-flash" &&
+        updatedState.currentModelId === `deepseek/${targetModelId}` &&
         sendResult?.ok === true &&
-        events.some((evt) => evt.event === 2) &&
+        cycle.ok === true &&
         /model-switch-ok/i.test(combinedText)
             ? "model-config-confirmed"
             : "model-config-incomplete";
@@ -124,8 +187,9 @@ await withSidecarRuntime({ sidecarPort: 8787 }, async ({ sidecarPort }) => {
     console.log(
         JSON.stringify(
             {
-                initialCurrentModelId: initialState.currentModelId,
-                availableModels: initialState.modelsByAssistant?.["uos-ai-generic"] ?? [],
+                initialCurrentModelId,
+                availableModels,
+                targetModelId,
                 switchResult,
                 updatedCurrentModelId: updatedState.currentModelId,
                 sendResult,
