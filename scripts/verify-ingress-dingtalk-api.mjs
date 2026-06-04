@@ -108,6 +108,7 @@ async function waitForSessionFinish(events, sessionId, expectedFinishCount, time
 
 async function withDingTalkCollector(run) {
     const calls = [];
+    let deliveryMode = "ok";
     const server = createServer((req, res) => {
         if (req.method !== "POST") {
             res.writeHead(405);
@@ -134,8 +135,13 @@ async function withDingTalkCollector(run) {
                 path: requestUrl.pathname,
                 query: Object.fromEntries(requestUrl.searchParams.entries()),
                 body: parsed,
+                deliveryMode,
             });
             res.writeHead(200, { "content-type": "application/json; charset=utf-8" });
+            if (deliveryMode === "app-error") {
+                res.end(JSON.stringify({ errcode: 310000, errmsg: "keyword not in whitelist" }));
+                return;
+            }
             res.end(JSON.stringify({ errcode: 0, errmsg: "ok" }));
         });
     });
@@ -162,6 +168,9 @@ async function withDingTalkCollector(run) {
         return await run({
             webhookUrl: `http://127.0.0.1:${port}/reply-dingtalk`,
             calls,
+            setDeliveryMode(mode) {
+                deliveryMode = mode;
+            },
             waitForCallCount,
         });
     } finally {
@@ -191,8 +200,10 @@ const now = Date.now();
 const source = "im-dingtalk-demo";
 const channelId = `dingtalk-room-${now}`;
 const threadId = `dingtalk-thread-${now}`;
+const failingThreadId = `dingtalk-thread-failure-${now}`;
 const firstExternalMessageId = `dingtalk-first-${now}`;
 const secondExternalMessageId = `dingtalk-second-${now}`;
+const failingExternalMessageId = `dingtalk-failure-${now}`;
 const runtimeDir = await mkdtemp(join(tmpdir(), "sunday-ingress-dingtalk-verify-"));
 const routeStorePath = join(runtimeDir, "external-ingress-routes.json");
 
@@ -203,13 +214,17 @@ try {
     let routeStore = null;
     let firstCall = null;
     let secondCall = null;
+    let failingIngressResult = null;
+    let failingReplayEntry = null;
+    let failingCall = null;
 
-    await withDingTalkCollector(async ({ webhookUrl, waitForCallCount }) => {
+    await withDingTalkCollector(async ({ webhookUrl, waitForCallCount, setDeliveryMode }) => {
         await withSidecarRuntime(
             {
                 sidecarPort: 8814,
                 env: {
                     PERSONAL_AGENT_RUNTIME_DIR: runtimeDir,
+                    PERSONAL_AGENT_INGRESS_REPLY_RETRY_DELAYS_MS: "0",
                     PERSONAL_AGENT_INGRESS_BACKGROUND_REPLAY_ENABLED: "0",
                 },
             },
@@ -257,6 +272,34 @@ try {
                     }
 
                     [, secondCall] = await waitForCallCount(2);
+
+                    setDeliveryMode("app-error");
+                    failingIngressResult = await post(baseUrl, "/ingress/message", {
+                        source,
+                        channelId,
+                        threadId: failingThreadId,
+                        userId: "demo-user",
+                        assistantId: "uos-ai-generic",
+                        text: "Reply with exactly: ingress-dingtalk-failure-ok",
+                        externalMessageId: failingExternalMessageId,
+                        replyTransport: "dingtalk-bot-webhook",
+                        replyWebhookUrl: webhookUrl,
+                        replyWebhookSecret: "ding-secret-demo",
+                    });
+
+                    collector.watchedSessionIds.add(failingIngressResult.sessionId);
+                    const failingCycle = await waitForSessionFinish(collector.events, failingIngressResult.sessionId, 1);
+                    if (!failingCycle.ok) {
+                        throw new Error(`dingtalk ingress verifier failure cycle did not finish: ${failingCycle.reason}`);
+                    }
+
+                    [, , failingCall] = await waitForCallCount(4);
+                    const operatorState = await post(baseUrl, "/service-config/get-ingress-operator-state", {
+                        includeResolved: true,
+                    });
+                    failingReplayEntry = operatorState?.result?.replayQueue?.entries?.find(
+                        (entry) => entry.routeKey === `${source}:${channelId}:${failingThreadId}`,
+                    ) ?? null;
                     routeStore = JSON.parse(await readFile(routeStorePath, "utf8"));
                 } finally {
                     await collector.close();
@@ -271,9 +314,12 @@ try {
     const checks = {
         firstIngressAccepted: firstIngressResult?.ok === true,
         secondIngressAccepted: secondIngressResult?.ok === true,
+        failingIngressAccepted: failingIngressResult?.ok === true,
         firstReplyUsesDingtalkBody: firstCall?.body?.msgtype === "text"
             && firstCall?.body?.text?.content === "ingress-dingtalk-first-ok",
         secondReplyUsesStoredRoute: secondCall?.body?.text?.content === "ingress-dingtalk-followup-ok",
+        failingReplyUsesDingtalkBody: failingCall?.body?.msgtype === "text"
+            && failingCall?.body?.text?.content === "ingress-dingtalk-failure-ok",
         firstReplyIncludesSignedQuery: typeof firstCall?.query?.timestamp === "string"
             && Boolean(firstCall?.query?.timestamp)
             && typeof firstCall?.query?.sign === "string"
@@ -289,6 +335,12 @@ try {
             && persistedRoute.replyTarget.url.includes("/reply-dingtalk"),
         persistedRouteStoresSecret: typeof persistedRoute?.replyTarget?.secret === "string"
             && persistedRoute.replyTarget.secret.length > 0,
+        failingReplayEntryCapturesProviderCode: failingReplayEntry?.latestReceipt?.ok === false
+            && failingReplayEntry?.latestReceipt?.providerCode === "310000",
+        failingReplayEntryCapturesProviderMessage: typeof failingReplayEntry?.latestReceipt?.providerMessage === "string"
+            && failingReplayEntry.latestReceipt.providerMessage.includes("keyword not in whitelist"),
+        failingReplayEntryCapturesResponsePreview: typeof failingReplayEntry?.latestReceipt?.responseBodyPreview === "string"
+            && failingReplayEntry.latestReceipt.responseBodyPreview.includes("errcode"),
     };
 
     const verdict = Object.values(checks).every(Boolean)
@@ -298,10 +350,13 @@ try {
     console.log(JSON.stringify({
         firstIngressResult,
         secondIngressResult,
+        failingIngressResult,
         firstCall,
         secondCall,
+        failingCall,
         storedRoute: sanitizeRoute(storedRoute),
         persistedRoute: sanitizeRoute(persistedRoute),
+        failingReplayEntry,
         checks,
         verdict,
     }, null, 2));

@@ -72,7 +72,17 @@ Sunday 当前提供一个 sidecar 级别的外部消息入站协议：
 
 - `external-ingress-routes.json`
 
-目前这是一个 sidecar 级 contract，不是前端能力。
+当前 route persistence 也已经并入 shared runtime store contract：
+
+- `routePersistence = shared-runtime-store`
+- `routeMutationAuthority = sidecar-direct`
+
+也就是说，route ownership 现在明确分成两层：
+
+- 持久化落点是 shared runtime store
+- 当前写入 authority 仍然是 sidecar 本体
+
+目前这仍然不是前端写入能力，前端只消费 operator surface。
 
 ### Provider-specific adapter: Lark / Feishu custom bot webhook
 
@@ -245,12 +255,14 @@ reply queue 会额外保留：
 - 累计 attempt / replay 次数
 - delivered / resolved 等状态
 - 每条 queue entry 的 replay history（初始失败 / 自动或手动重试 / resolve）
-- `latestReceipt`（最近一次投递回执摘要：actor / mode / transport / HTTP 状态 / error）
+- `latestReceipt`（最近一次投递回执摘要：actor / mode / transport / HTTP 状态 / error / providerCode / providerMessage / responseBodyPreview）
 - `processing`（当前 claim owner / mode / lease）
 
-当前还没有：
+当前 provider-specific delivery receipts 已经开始结构化：
 
-- 平台专属回执确认
+- DingTalk / Lark 这类 transport 会把应用层返回里的 `code` / `errcode` 和 `msg` / `errmsg` 暴露到 `latestReceipt`
+- 当平台返回 `HTTP 200` 但 provider code 非成功态时，Sunday 会按失败处理，并把 `providerCode`、`providerMessage`、`responseBodyPreview` 写进 replay queue
+- 更细的平台专属 receipt taxonomy 仍然可以继续扩，但最小可操作治理面已经具备
 
 ## Background Replay
 
@@ -317,8 +329,8 @@ background replay 当前支持两类 delivery policy：
 
 当前 ownership contract：
 
-- route persistence 仍由 sidecar 管理：`external-ingress-routes.json`
-- replay queue / operator control / service status 已下沉到 shared runtime store
+- route persistence / replay queue / operator control / service status 现在都已纳入 shared runtime store contract
+- route ownership 当前通过 `routePersistence=shared-runtime-store` 和 `routeMutationAuthority=sidecar-direct` 明确暴露
 - dedicated / standalone worker 都直接访问 shared runtime store，不再依赖 sidecar operator API 轮询
 - replay history 和 delivery receipt 已进入 operator state 与前端 UI
 
@@ -418,6 +430,9 @@ background replay 当前支持两类 delivery policy：
 - `nextAttemptAt / lastAttemptAt`
 - `latestReceipt`
 - `processing`
+- `providerCode`
+- `providerMessage`
+- `responseBodyPreview`
 
 ### Replay one entry
 

@@ -256,11 +256,15 @@ export function ensureDevInjectedChannels() {
                     transport: "slack-webhook",
                     ok: false,
                     statusCode: 500,
+                    statusText: "Internal Server Error",
                     at: "2026-06-04T13:25:00.000Z",
                     error: "Slack webhook returned HTTP 500",
+                    providerCode: "",
+                    providerMessage: "",
+                    responseBodyPreview: "error",
                     providerPayloadPreview: "{\"text\":\"Sunday 处理失败：demo webhook timeout\"}",
                 },
-                processing: null,
+                processing: null as { ownerId?: string } | null,
                 history: [
                     {
                         kind: "delivery-failed",
@@ -317,11 +321,15 @@ export function ensureDevInjectedChannels() {
                     transport: "webhook",
                     ok: true,
                     statusCode: 200,
+                    statusText: "OK",
                     at: "2026-06-04T11:25:00.000Z",
                     error: "",
+                    providerCode: "",
+                    providerMessage: "",
+                    responseBodyPreview: "ok",
                     providerPayloadPreview: "{\"ok\":true,\"assistantText\":\"已完成处理\"}",
                 },
-                processing: null,
+                processing: null as { ownerId?: string } | null,
                 history: [
                     {
                         kind: "delivery-failed",
@@ -418,7 +426,8 @@ export function ensureDevInjectedChannels() {
                     updatedAt: mockIngressBackgroundReplayUpdatedAt,
                 },
                 ownership: {
-                    routePersistence: "sidecar-route-store",
+                    routePersistence: "shared-runtime-store",
+                    routeMutationAuthority: "sidecar-direct",
                     replayQueuePersistence: "shared-runtime-store",
                     automaticReplayExecutor: "sidecar-direct",
                     serviceUsesSidecarOperatorApi: false,

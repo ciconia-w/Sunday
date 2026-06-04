@@ -132,14 +132,15 @@ Current state:
 - operator governance now includes persisted pause/resume for automatic replay, and the pause state survives sidecar restarts
 - replay queue entries now expose replay history in operator state and the `IM Bridge` UI
 - replay queue ownership is now down in a shared runtime store, and dedicated / standalone workers read it directly
-- operator state and `IM Bridge` UI now expose queue ownership, latest delivery receipt, and active processing claim
+- operator state and `IM Bridge` UI now expose queue ownership, route ownership, latest delivery receipt, and active processing claim
+- route persistence is now also expressed through the shared runtime store contract, with `routeMutationAuthority` still staying on sidecar
+- provider-specific delivery receipts now start exposing structured `providerCode / providerMessage / responseBodyPreview` instead of only raw HTTP outcome
 
 Current gaps:
 
 - platform-specific bridge logic still needs to be layered on top of the generic ingress contract
 - provider coverage is still narrow; broader platform coverage is still missing
-- route persistence still lives in sidecar; only replay queue ownership has moved
-- retry policy is richer but still intentionally minimal; platform-specific delivery receipts and finer governance are still missing
+- retry policy is richer but still intentionally minimal; finer governance and broader provider receipt taxonomy are still missing
 
 Recommended next step:
 

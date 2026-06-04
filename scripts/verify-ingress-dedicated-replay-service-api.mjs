@@ -301,6 +301,8 @@ try {
         operatorStateUsesServiceMode: initialOperatorState?.backgroundReplay?.mode === "service",
         serviceReportedAsDedicated: initialOperatorState?.backgroundReplay?.hasDedicatedReplayService === true,
         operatorStateUsesFixedStrategy: initialOperatorState?.backgroundReplay?.deliveryPolicy?.strategy === "fixed",
+        operatorStateUsesSharedRouteOwnership: initialOperatorState?.backgroundReplay?.ownership?.routePersistence === "shared-runtime-store"
+            && initialOperatorState?.backgroundReplay?.ownership?.routeMutationAuthority === "sidecar-direct",
         operatorStateUsesSharedQueueOwnership: initialOperatorState?.backgroundReplay?.ownership?.replayQueuePersistence === "shared-runtime-store"
             && initialOperatorState?.backgroundReplay?.ownership?.automaticReplayExecutor === "service-worker-direct"
             && initialOperatorState?.backgroundReplay?.ownership?.serviceUsesSidecarOperatorApi === false,

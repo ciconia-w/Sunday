@@ -1,6 +1,4 @@
 import { randomUUID } from "node:crypto";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { dirname, resolve } from "node:path";
 import { executeReplyDelivery, normalizeReplyTransport, normalizeRetryDelays, SUPPORTED_REPLY_TRANSPORTS } from "./ingress-reply-delivery.mjs";
 import {
     IngressReplayStore,
@@ -279,7 +277,6 @@ function createFutureIso(ms) {
 export class ExternalIngress {
     constructor(options) {
         this.options = options;
-        this.routeStorePath = resolve(options.runtimeDir, "external-ingress-routes.json");
         this.replayStore = new IngressReplayStore(options.runtimeDir);
         this.replyRetryDelaysMs = normalizeRetryDelays(
             process.env.PERSONAL_AGENT_INGRESS_REPLY_RETRY_DELAYS_MS,
@@ -321,27 +318,12 @@ export class ExternalIngress {
     }
 
     async loadRouteTargets() {
-        try {
-            const raw = await readFile(this.routeStorePath, "utf8");
-            const parsed = JSON.parse(raw);
-            const records = Array.isArray(parsed?.routes) ? parsed.routes : [];
-
-            this.routeTargets = new Map(
-                records
-                    .filter((record) => typeof record?.routeKey === "string" && record.routeKey.trim())
-                    .map((record) => [record.routeKey.trim(), record]),
-            );
-        } catch {
-            this.routeTargets = new Map();
-        }
+        const records = await this.replayStore.loadReplyRouteEntries();
+        this.routeTargets = new Map(records.map((record) => [record.routeKey.trim(), record]));
     }
 
     async saveRouteTargets() {
-        await mkdir(dirname(this.routeStorePath), { recursive: true });
-        const routes = [...this.routeTargets.values()].sort((left, right) =>
-            String(left.routeKey ?? "").localeCompare(String(right.routeKey ?? "")),
-        );
-        await writeFile(this.routeStorePath, JSON.stringify({ routes }, null, 2));
+        await this.replayStore.saveReplyRouteEntries([...this.routeTargets.values()]);
     }
 
     async loadReplayQueue() {
@@ -497,7 +479,7 @@ export class ExternalIngress {
             return;
         }
 
-        this.routeTargets.set(route.routeKey, {
+        const storedRoute = await this.replayStore.upsertReplyRoute({
             routeKey: route.routeKey,
             source: route.source,
             channelId: route.channelId,
@@ -507,7 +489,7 @@ export class ExternalIngress {
             replyTarget,
             updatedAt: new Date().toISOString(),
         });
-        await this.saveRouteTargets();
+        this.routeTargets.set(storedRoute.routeKey, storedRoute);
     }
 
     async listReplyRoutes() {
@@ -643,7 +625,8 @@ export class ExternalIngress {
         const backgroundReplayServiceStatus = await this.getBackgroundReplayServiceStatus();
         const backgroundReplayControl = this.getBackgroundReplayControlState();
         const ownership = {
-            routePersistence: "sidecar-route-store",
+            routePersistence: "shared-runtime-store",
+            routeMutationAuthority: "sidecar-direct",
             replayQueuePersistence: "shared-runtime-store",
             automaticReplayExecutor: this.usesDedicatedBackgroundReplayService()
                 ? (this.backgroundReplayMode === "service" ? "service-worker-direct" : "standalone-worker-direct")

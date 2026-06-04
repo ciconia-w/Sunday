@@ -67,8 +67,12 @@ interface IngressReplayQueueEntry {
         transport?: string;
         ok?: boolean;
         statusCode?: number;
+        statusText?: string;
         at?: string;
         error?: string;
+        providerCode?: string;
+        providerMessage?: string;
+        responseBodyPreview?: string;
         providerPayloadPreview?: string;
     } | null;
     processing?: {
@@ -143,6 +147,7 @@ interface IngressOperatorState {
         };
         ownership: {
             routePersistence: string;
+            routeMutationAuthority?: string;
             replayQueuePersistence: string;
             automaticReplayExecutor: string;
             serviceUsesSidecarOperatorApi: boolean;
@@ -212,6 +217,7 @@ const createDefaultOperatorState = (): IngressOperatorState => ({
         },
         ownership: {
             routePersistence: "",
+            routeMutationAuthority: "",
             replayQueuePersistence: "",
             automaticReplayExecutor: "",
             serviceUsesSidecarOperatorApi: false,
@@ -559,7 +565,13 @@ export default defineComponent({
         });
         const routeOwnershipText = computed(() => {
             const ownership = operatorState.value.backgroundReplay.ownership;
-            return ownership.routePersistence || "未提供";
+            if (!ownership.routePersistence) {
+                return "未提供";
+            }
+
+            return ownership.routeMutationAuthority
+                ? `${ownership.routePersistence} / ${ownership.routeMutationAuthority}`
+                : ownership.routePersistence;
         });
         const operatorApiDependencyText = computed(() => {
             return operatorState.value.backgroundReplay.ownership.serviceUsesSidecarOperatorApi
@@ -918,9 +930,25 @@ export default defineComponent({
                                                                     {" / "}
                                                                     {entry.latestReceipt.mode || "unknown"}
                                                                     {entry.latestReceipt.statusCode ? ` / HTTP ${entry.latestReceipt.statusCode}` : ""}
+                                                                    {entry.latestReceipt.statusText ? ` ${entry.latestReceipt.statusText}` : ""}
                                                                 </div>
                                                                 <div>At: {this.formatTimeLabel(entry.latestReceipt.at || "") || "-"}</div>
                                                                 {entry.latestReceipt.error ? <div>Error: {entry.latestReceipt.error}</div> : null}
+                                                                {entry.latestReceipt.providerCode ? (
+                                                                    <div data-ingress-replay-receipt-provider-code>
+                                                                        Provider Code: {entry.latestReceipt.providerCode}
+                                                                    </div>
+                                                                ) : null}
+                                                                {entry.latestReceipt.providerMessage ? (
+                                                                    <div data-ingress-replay-receipt-provider-message>
+                                                                        Provider Message: {entry.latestReceipt.providerMessage}
+                                                                    </div>
+                                                                ) : null}
+                                                                {entry.latestReceipt.responseBodyPreview ? (
+                                                                    <div data-ingress-replay-receipt-response-preview>
+                                                                        Response Preview: {entry.latestReceipt.responseBodyPreview}
+                                                                    </div>
+                                                                ) : null}
                                                             </div>
                                                         )}
                                                         {entry.processing?.ownerId && (
