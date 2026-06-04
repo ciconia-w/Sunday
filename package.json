@@ -53,6 +53,7 @@
     "verify:ingress-operator-api": "node ./scripts/verify-ingress-operator-api.mjs",
     "verify:ingress-operator-service-config-api": "node ./scripts/verify-ingress-operator-service-config-api.mjs",
     "verify:ingress-operator-governance-api": "node ./scripts/verify-ingress-operator-governance-api.mjs",
+    "verify:ingress-replay-history-api": "node ./scripts/verify-ingress-replay-history-api.mjs",
     "verify:ingress-operator-bundle": "node ./scripts/verify-ingress-operator-bundle.mjs",
     "verify:ingress-source": "node ./scripts/verify-ingress-source.mjs",
     "verify:system-channel": "bash ./scripts/verify-system-channel.sh",

@@ -150,6 +150,7 @@ Date: 2026-06-03
   - 扩展区 `IM Bridge` operator UI：
     - reply route 列表
     - replay queue 列表
+    - 单条 queue entry 的 replay history timeline
     - delivery policy / background replay 模式展示
     - automatic replay pause / resume 治理
     - `立即重试 / 标记已处理 / 忽略` 的人工操作
@@ -159,6 +160,7 @@ Date: 2026-06-03
     - `pauseIngressBackgroundReplay`
     - `resumeIngressBackgroundReplay`
     - `resolveIngressQueueEntry`
+  - replay queue entry 现在会在 operator state 中保留初始失败、自动/手动重试以及 resolve 的历史事件
 - `browser control` 已具备默认关闭、按需启用、按需注册工具的基础能力
 - Qt host 的 `serviceConfig` 已补齐浏览器 / CLI / MCP 基本 runtime bridge
 - 浏览器运行时能力画像已下沉到 sidecar：`stableTabSwitch`、`stableScreenshotCapture`、`runtimeLimitNotice`、`knownIssues` 由 `browser-control.mjs` 统一给出，前端不再直接写死 OpenCLI 版本判断

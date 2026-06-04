@@ -250,6 +250,26 @@ export function ensureDevInjectedChannels() {
                 resolvedAt: "",
                 nextAttemptAt: "",
                 lastAttemptAt: "2026-06-04T13:25:00.000Z",
+                history: [
+                    {
+                        kind: "delivery-failed",
+                        mode: "initial",
+                        at: "2026-06-04T13:20:00.000Z",
+                        attemptCount: 3,
+                        totalAttemptCount: 3,
+                        status: "awaiting-operator",
+                        error: "demo webhook timeout",
+                    },
+                    {
+                        kind: "replay-failed",
+                        mode: "manual",
+                        at: "2026-06-04T13:25:00.000Z",
+                        attemptCount: 1,
+                        totalAttemptCount: 4,
+                        status: "awaiting-operator",
+                        error: "demo webhook timeout",
+                    },
+                ],
             },
             {
                 id: "demo-replay-resolved",
@@ -280,6 +300,35 @@ export function ensureDevInjectedChannels() {
                 resolvedAt: "2026-06-04T11:30:00.000Z",
                 nextAttemptAt: "",
                 lastAttemptAt: "2026-06-04T11:25:00.000Z",
+                history: [
+                    {
+                        kind: "delivery-failed",
+                        mode: "initial",
+                        at: "2026-06-04T11:20:00.000Z",
+                        attemptCount: 2,
+                        totalAttemptCount: 2,
+                        status: "pending",
+                        error: "temporary upstream 500",
+                    },
+                    {
+                        kind: "replay-succeeded",
+                        mode: "manual",
+                        at: "2026-06-04T11:25:00.000Z",
+                        attemptCount: 1,
+                        totalAttemptCount: 3,
+                        status: "delivered",
+                        error: "",
+                    },
+                    {
+                        kind: "resolved",
+                        mode: "operator",
+                        at: "2026-06-04T11:30:00.000Z",
+                        attemptCount: 0,
+                        totalAttemptCount: 3,
+                        status: "resolved",
+                        error: "",
+                    },
+                ],
             },
         ];
         const visibleReplayEntries = includeResolved
@@ -1123,6 +1172,18 @@ export function ensureDevInjectedChannels() {
                         latestError: "",
                         deliveredAt: new Date().toISOString(),
                         updatedAt: new Date().toISOString(),
+                        history: [
+                            ...(((matchedEntry || {}).history ?? []) as unknown[]),
+                            {
+                                kind: "replay-succeeded",
+                                mode: "manual",
+                                at: new Date().toISOString(),
+                                attemptCount: 1,
+                                totalAttemptCount: Number((matchedEntry as { attemptCount?: number } | undefined)?.attemptCount ?? 0) + 1,
+                                status: "delivered",
+                                error: "",
+                            },
+                        ],
                     },
                 };
             }),
@@ -1156,6 +1217,17 @@ export function ensureDevInjectedChannels() {
                 status: resolution || "resolved",
                 updatedAt: new Date().toISOString(),
                 resolvedAt: new Date().toISOString(),
+                history: [
+                    {
+                        kind: resolution || "resolved",
+                        mode: "operator",
+                        at: new Date().toISOString(),
+                        attemptCount: 0,
+                        totalAttemptCount: 0,
+                        status: resolution || "resolved",
+                        error: "",
+                    },
+                ],
             })),
             getMcpThirdPartyAgreement: callbackify(async () => mcpThirdPartyAgreementAccepted),
             setMcpThirdPartyAgreement: callbackify(async (accepted: boolean) => {

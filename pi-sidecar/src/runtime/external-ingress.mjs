@@ -9,6 +9,7 @@ const SUPPORTED_REPLY_TRANSPORTS = [
     "slack-webhook",
     "discord-webhook",
 ];
+const MAX_REPLAY_HISTORY_EVENTS = 12;
 
 function normalizeRouteValue(value, fallback) {
     const normalized = typeof value === "string" ? value.trim() : "";
@@ -251,7 +252,107 @@ function summarizeReplayQueueEntry(entry) {
         resolvedAt: entry.resolvedAt ?? "",
         nextAttemptAt: entry.nextAttemptAt ?? "",
         lastAttemptAt: entry.lastAttemptAt ?? "",
+        history: normalizeReplayHistory(entry.history, entry),
     };
+}
+
+function normalizeReplayHistoryKind(value) {
+    const normalized = typeof value === "string" ? value.trim() : "";
+    return normalized || "unknown";
+}
+
+function normalizeReplayHistoryMode(value) {
+    const normalized = typeof value === "string" ? value.trim() : "";
+    return normalized || "unknown";
+}
+
+function createReplayHistoryEvent(event) {
+    return {
+        kind: normalizeReplayHistoryKind(event?.kind),
+        mode: normalizeReplayHistoryMode(event?.mode),
+        at: typeof event?.at === "string" ? event.at : "",
+        attemptCount: normalizeNonNegativeInteger(event?.attemptCount, 0),
+        totalAttemptCount: normalizeNonNegativeInteger(event?.totalAttemptCount, 0),
+        status: typeof event?.status === "string" ? event.status : "",
+        error: typeof event?.error === "string" ? event.error : "",
+    };
+}
+
+function buildLegacyReplayHistory(entry) {
+    const events = [];
+    const totalAttemptCount = normalizeNonNegativeInteger(entry?.attemptCount, 0);
+    const latestError = typeof entry?.latestError === "string" ? entry.latestError : "";
+    const createdAt = typeof entry?.createdAt === "string" ? entry.createdAt : "";
+    const deliveredAt = typeof entry?.deliveredAt === "string" ? entry.deliveredAt : "";
+    const resolvedAt = typeof entry?.resolvedAt === "string" ? entry.resolvedAt : "";
+    const status = typeof entry?.status === "string" ? entry.status : "";
+
+    if (createdAt && latestError) {
+        events.push(createReplayHistoryEvent({
+            kind: "delivery-failed",
+            mode: "initial",
+            at: createdAt,
+            attemptCount: totalAttemptCount,
+            totalAttemptCount,
+            status,
+            error: latestError,
+        }));
+    }
+
+    if (deliveredAt) {
+        events.push(createReplayHistoryEvent({
+            kind: "delivered",
+            mode: "unknown",
+            at: deliveredAt,
+            totalAttemptCount,
+            status: "delivered",
+            error: "",
+        }));
+    }
+
+    if (resolvedAt && ["resolved", "discarded"].includes(status)) {
+        events.push(createReplayHistoryEvent({
+            kind: status,
+            mode: "operator",
+            at: resolvedAt,
+            totalAttemptCount,
+            status,
+            error: "",
+        }));
+    }
+
+    return events.slice(-MAX_REPLAY_HISTORY_EVENTS);
+}
+
+function normalizeReplayHistory(history, fallbackEntry = null) {
+    const normalizedEvents = Array.isArray(history)
+        ? history
+            .map((event) => createReplayHistoryEvent(event))
+            .filter((event) => event.at || event.kind !== "unknown")
+        : [];
+
+    if (normalizedEvents.length > 0) {
+        return normalizedEvents.slice(-MAX_REPLAY_HISTORY_EVENTS);
+    }
+
+    return buildLegacyReplayHistory(fallbackEntry);
+}
+
+function appendReplayHistory(entry, event) {
+    const existingHistory = Array.isArray(entry?.history)
+        ? entry.history.map((item) => createReplayHistoryEvent(item))
+        : normalizeReplayHistory(undefined, entry);
+
+    return normalizeReplayHistory([
+        ...existingHistory,
+        createReplayHistoryEvent(event),
+    ]);
+}
+
+function normalizeReplayQueueEntryRecord(entry) {
+    const normalizedEntry = (entry && typeof entry === "object") ? { ...entry } : {};
+    normalizedEntry.history = normalizeReplayHistory(normalizedEntry.history, normalizedEntry);
+    return normalizedEntry;
 }
 
 function createDefaultBackgroundReplayControl() {
@@ -369,7 +470,10 @@ export class ExternalIngress {
             this.replayQueue = new Map(
                 entries
                     .filter((entry) => typeof entry?.id === "string" && entry.id.trim())
-                    .map((entry) => [entry.id.trim(), entry]),
+                    .map((entry) => {
+                        const normalizedEntry = normalizeReplayQueueEntryRecord(entry);
+                        return [normalizedEntry.id.trim(), normalizedEntry];
+                    }),
             );
         } catch {
             this.replayQueue = new Map();
@@ -788,7 +892,17 @@ export class ExternalIngress {
             resolvedAt: "",
             nextAttemptAt,
             lastAttemptAt: "",
+            history: [],
         };
+        entry.history = appendReplayHistory(entry, {
+            kind: "delivery-failed",
+            mode: "initial",
+            at: now,
+            attemptCount: errors.length,
+            totalAttemptCount: entry.attemptCount,
+            status: entry.status,
+            error: entry.latestError,
+        });
 
         this.replayQueue.set(entry.id, entry);
         await this.saveReplayQueue();
@@ -1299,6 +1413,15 @@ export class ExternalIngress {
                 entry.latestError = "";
                 entry.deliveredAt = now;
                 entry.nextAttemptAt = "";
+                entry.history = appendReplayHistory(entry, {
+                    kind: "replay-succeeded",
+                    mode: automatic ? "automatic" : "manual",
+                    at: now,
+                    attemptCount: delivery.attemptCount,
+                    totalAttemptCount: entry.attemptCount,
+                    status: entry.status,
+                    error: "",
+                });
             } else {
                 entry.latestError = delivery.errors[delivery.errors.length - 1]?.error ?? "Reply delivery failed";
                 entry.errors = [...(Array.isArray(entry.errors) ? entry.errors : []), ...delivery.errors];
@@ -1314,6 +1437,16 @@ export class ExternalIngress {
                     entry.status = "awaiting-operator";
                     entry.nextAttemptAt = "";
                 }
+
+                entry.history = appendReplayHistory(entry, {
+                    kind: "replay-failed",
+                    mode: automatic ? "automatic" : "manual",
+                    at: now,
+                    attemptCount: delivery.attemptCount,
+                    totalAttemptCount: entry.attemptCount,
+                    status: entry.status,
+                    error: entry.latestError,
+                });
             }
 
             this.replayQueue.set(entry.id, entry);
@@ -1354,6 +1487,14 @@ export class ExternalIngress {
         entry.status = normalizedResolution;
         entry.resolvedAt = now;
         entry.updatedAt = now;
+        entry.history = appendReplayHistory(entry, {
+            kind: normalizedResolution,
+            mode: "operator",
+            at: now,
+            totalAttemptCount: normalizeNonNegativeInteger(entry.attemptCount, 0),
+            status: normalizedResolution,
+            error: "",
+        });
         this.replayQueue.set(entry.id, entry);
         await this.saveReplayQueue();
 
