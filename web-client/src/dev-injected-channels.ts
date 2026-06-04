@@ -166,6 +166,14 @@ export function ensureDevInjectedChannels() {
     >();
     const workspaceOutlines = new Map<string, { title: string; paragraphs: Array<{ title: string; content: Array<{ title: string }> }> }>();
     let mcpThirdPartyAgreementAccepted = false;
+    const mockFilesystemToolPreview = [
+        "read_file",
+        "read_text_file",
+        "read_multiple_files",
+        "write_file",
+        "edit_file",
+        "list_directory",
+    ];
     let mcpServices = [
         {
             id: "filesystem",
@@ -176,6 +184,12 @@ export function ensureDevInjectedChannels() {
             isBuiltIn: true,
             editable: false,
             removable: false,
+            runtimeStatus: "ready",
+            runtimeStatusText: "已就绪",
+            runtimeDetail: "内置文件系统服务已就绪，可直接访问本地文件。",
+            transportKind: "builtin",
+            toolPreview: mockFilesystemToolPreview.map((name) => ({ name, description: "" })),
+            toolCount: 14,
         },
     ];
 
@@ -219,6 +233,105 @@ export function ensureDevInjectedChannels() {
             editable: true,
             removable: true,
             jsonConfig: normalizedConfig,
+        };
+    }
+
+    function getMockMcpRuntimeShape(service: Record<string, unknown>) {
+        if (service.isBuiltIn === true) {
+            const enabled = service.enabled !== false;
+            return {
+                runtimeStatus: enabled ? "ready" : "disabled",
+                runtimeStatusText: enabled ? "已就绪" : "已停用",
+                runtimeDetail: enabled ? "内置文件系统服务已就绪，可直接访问本地文件。" : "启用后可恢复本地文件访问能力。",
+                transportKind: "builtin",
+                toolPreview: mockFilesystemToolPreview.map((name) => ({ name, description: "" })),
+                toolCount: 14,
+            };
+        }
+
+        const enabled = service.enabled === true;
+        if (!enabled) {
+            return {
+                runtimeStatus: "disabled",
+                runtimeStatusText: "已停用",
+                runtimeDetail: "启用后才会参与运行时检测。",
+                transportKind: "stdio",
+                toolPreview: [],
+                toolCount: 0,
+            };
+        }
+
+        try {
+            const parsed = JSON.parse(String(service.jsonConfig ?? ""));
+            const servers = parsed?.mcpServers;
+            const entries = servers && typeof servers === "object" && !Array.isArray(servers)
+                ? Object.entries(servers)
+                : [];
+            const serviceConfig = entries[0]?.[1];
+
+            if (typeof serviceConfig?.command === "string" && serviceConfig.command.trim()) {
+                const command = serviceConfig.command.trim();
+                if (command === "definitely-missing-mcp-binary") {
+                    return {
+                        runtimeStatus: "error",
+                        runtimeStatusText: "命令不存在",
+                        runtimeDetail: "spawn definitely-missing-mcp-binary ENOENT",
+                        transportKind: "stdio",
+                        toolPreview: [],
+                        toolCount: 0,
+                    };
+                }
+
+                return {
+                    runtimeStatus: "ready",
+                    runtimeStatusText: "已就绪",
+                    runtimeDetail: "通过 stdio 检出 14 个工具。",
+                    transportKind: "stdio",
+                    toolPreview: mockFilesystemToolPreview.map((name) => ({ name, description: "" })),
+                    toolCount: 14,
+                };
+            }
+
+            if (typeof serviceConfig?.url === "string" && serviceConfig.url.trim()) {
+                return {
+                    runtimeStatus: "error",
+                    runtimeStatusText: "暂不支持",
+                    runtimeDetail: "当前仅支持 stdio 类型的 MCP 服务运行时检测。",
+                    transportKind: "url",
+                    toolPreview: [],
+                    toolCount: 0,
+                };
+            }
+        } catch (error) {
+            return {
+                runtimeStatus: "error",
+                runtimeStatusText: "配置错误",
+                runtimeDetail: error instanceof Error ? error.message : "JSON 配置格式不合法，请检查后重试。",
+                transportKind: "unknown",
+                toolPreview: [],
+                toolCount: 0,
+            };
+        }
+
+        return {
+            runtimeStatus: "connecting",
+            runtimeStatusText: "待检测",
+            runtimeDetail: "点击“刷新状态”后将尝试启动服务并读取工具列表。",
+            transportKind: "unknown",
+            toolPreview: [],
+            toolCount: 0,
+        };
+    }
+
+    function buildMockMcpServicesResponse() {
+        return {
+            success: true,
+            services: clone(mcpServices).map((service) => ({
+                ...service,
+                ...getMockMcpRuntimeShape(service),
+            })),
+            runtimeReady: true,
+            thirdPartyAgreementAccepted: mcpThirdPartyAgreementAccepted,
         };
     }
 
@@ -774,10 +887,10 @@ export function ensureDevInjectedChannels() {
                 return true;
             }),
             getMcpServices: callbackify(async () => ({
-                success: true,
-                services: clone(mcpServices),
-                runtimeReady: true,
-                thirdPartyAgreementAccepted: mcpThirdPartyAgreementAccepted,
+                ...buildMockMcpServicesResponse(),
+            })),
+            refreshMcpRuntime: callbackify(async () => ({
+                ...buildMockMcpServicesResponse(),
             })),
             setMcpServiceEnabled: callbackify(async (serviceId: string, enabled: boolean) => {
                 const targetService = mcpServices.find((service) => service.id === serviceId);
@@ -787,12 +900,7 @@ export function ensureDevInjectedChannels() {
                 }
 
                 targetService.enabled = enabled === true;
-                return {
-                    success: true,
-                    services: clone(mcpServices),
-                    runtimeReady: true,
-                    thirdPartyAgreementAccepted: mcpThirdPartyAgreementAccepted,
-                };
+                return buildMockMcpServicesResponse();
             }),
             saveMcpService: callbackify(async (jsonConfig: string, description: string, serviceId = "") => {
                 const nextService = parseMcpServiceDraft(jsonConfig, description);
@@ -819,12 +927,7 @@ export function ensureDevInjectedChannels() {
                     mcpServices.splice(targetIndex, 1, nextService);
                 }
 
-                return {
-                    success: true,
-                    services: clone(mcpServices),
-                    runtimeReady: true,
-                    thirdPartyAgreementAccepted: mcpThirdPartyAgreementAccepted,
-                };
+                return buildMockMcpServicesResponse();
             }),
             deleteMcpService: callbackify(async (serviceId: string) => {
                 const nextServices = mcpServices.filter((service) => service.id !== serviceId || service.isBuiltIn);
@@ -834,12 +937,7 @@ export function ensureDevInjectedChannels() {
                 }
 
                 mcpServices = nextServices;
-                return {
-                    success: true,
-                    services: clone(mcpServices),
-                    runtimeReady: true,
-                    thirdPartyAgreementAccepted: mcpThirdPartyAgreementAccepted,
-                };
+                return buildMockMcpServicesResponse();
             }),
         },
     } as never;

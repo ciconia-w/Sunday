@@ -95,6 +95,12 @@ export default defineComponent({
             return Boolean(customActionConfig.value?.visible) || (props.showEditButton && props.item.editable) || props.item.removable;
         });
 
+        const toolPreviewOverflowCount = computed(() => {
+            const previewCount = Array.isArray(props.item.toolPreview) ? props.item.toolPreview.length : 0;
+            const totalCount = Number.isFinite(props.item.toolCount) ? Number(props.item.toolCount) : 0;
+            return totalCount > previewCount ? totalCount - previewCount : 0;
+        });
+
         // 只有描述实际被省略时才显示完整 tooltip
         const tooltipDisabled = computed(() => {
             return !props.item.description || !isDescriptionOverflowing.value;
@@ -233,6 +239,7 @@ export default defineComponent({
             showActions,
             customActionConfig,
             tooltipDisabled,
+            toolPreviewOverflowCount,
             setDescriptionRef,
             handleDescriptionMouseEnter,
             renderTooltipContent,
@@ -260,7 +267,13 @@ export default defineComponent({
                                 </span>
                             )}
                             {this.$props.item.statusText && (
-                                <span class="tool-management-list-item__badge tool-management-list-item__badge--status">
+                                <span
+                                    class={[
+                                        "tool-management-list-item__badge",
+                                        "tool-management-list-item__badge--status",
+                                        this.$props.item.statusTone && `tool-management-list-item__badge--${this.$props.item.statusTone}`,
+                                    ]}
+                                >
                                     {this.$props.item.statusText}
                                 </span>
                             )}
@@ -320,6 +333,28 @@ export default defineComponent({
                             {this.$props.item.description}
                         </div>
                     </Tooltip>
+
+                    {this.$props.item.detailText && (
+                        <div class="tool-management-list-item__detail">{this.$props.item.detailText}</div>
+                    )}
+
+                    {Array.isArray(this.$props.item.toolPreview) && this.$props.item.toolPreview.length > 0 && (
+                        <div class="tool-management-list-item__tool-preview">
+                            <span class="tool-management-list-item__tool-preview-label">工具预览</span>
+                            <div class="tool-management-list-item__tool-preview-list">
+                                {this.$props.item.toolPreview.map((toolName) => (
+                                    <span class="tool-management-list-item__tool-chip" key={`${this.$props.item.id}-${toolName}`}>
+                                        {toolName}
+                                    </span>
+                                ))}
+                                {this.toolPreviewOverflowCount > 0 && (
+                                    <span class="tool-management-list-item__tool-chip tool-management-list-item__tool-chip--overflow">
+                                        +{this.toolPreviewOverflowCount}
+                                    </span>
+                                )}
+                            </div>
+                        </div>
+                    )}
                 </div>
 
                 <Switch

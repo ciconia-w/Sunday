@@ -72,6 +72,24 @@ html.dark {
     color: rgba(0, 130, 250, 1);
 }
 
+.tool-management-list-item__badge--success {
+    border-color: rgba(22, 163, 74, 0.25);
+    background: rgba(22, 163, 74, 0.12);
+    color: rgba(21, 128, 61, 1);
+}
+
+.tool-management-list-item__badge--warning {
+    border-color: rgba(217, 119, 6, 0.24);
+    background: rgba(245, 158, 11, 0.14);
+    color: rgba(180, 83, 9, 1);
+}
+
+.tool-management-list-item__badge--error {
+    border-color: rgba(220, 38, 38, 0.2);
+    background: rgba(220, 38, 38, 0.1);
+    color: rgba(185, 28, 28, 1);
+}
+
 .tool-management-list-item__actions {
     display: inline-flex;
     align-items: center;
@@ -102,6 +120,54 @@ html.dark {
     font-size: var(--uosai-font-size-xs);
     font-weight: 400;
     font-style: normal;
+}
+
+.tool-management-list-item__detail {
+    margin-top: 6px;
+    color: rgba(102, 112, 133, 1);
+    font-size: var(--uosai-font-size-xs);
+    line-height: var(--uosai-line-height-regular);
+    white-space: normal;
+    word-break: break-word;
+}
+
+.tool-management-list-item__tool-preview {
+    display: flex;
+    align-items: flex-start;
+    margin-top: 8px;
+}
+
+.tool-management-list-item__tool-preview-label {
+    flex: 0 0 auto;
+    margin-right: 8px;
+    color: rgba(102, 112, 133, 1);
+    font-size: var(--uosai-font-size-xs);
+    line-height: 20px;
+}
+
+.tool-management-list-item__tool-preview-list {
+    display: flex;
+    flex: 1;
+    flex-wrap: wrap;
+    gap: 6px;
+    min-width: 0;
+}
+
+.tool-management-list-item__tool-chip {
+    display: inline-flex;
+    align-items: center;
+    min-height: 20px;
+    padding: 0 8px;
+    border-radius: 6px;
+    background: rgba(15, 23, 42, 0.05);
+    color: rgba(15, 23, 42, 0.78);
+    font-size: var(--uosai-font-size-xs);
+    line-height: 20px;
+}
+
+.tool-management-list-item__tool-chip--overflow {
+    background: rgba(0, 129, 255, 0.1);
+    color: rgba(0, 130, 250, 1);
 }
 
 .uos-tooltip.tool-management-list-item__tooltip-popper {
@@ -139,4 +205,14 @@ html.dark {
 
 .tool-management-list-item__tooltip-link:hover {
     text-decoration: underline;
+}
+
+html.dark .tool-management-list-item__detail,
+html.dark .tool-management-list-item__tool-preview-label {
+    color: rgba(255, 255, 255, 0.65);
+}
+
+html.dark .tool-management-list-item__tool-chip {
+    background: rgba(255, 255, 255, 0.08);
+    color: rgba(255, 255, 255, 0.86);
 }

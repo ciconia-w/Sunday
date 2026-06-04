@@ -85,6 +85,25 @@ export default defineComponent({
             return orderedServices;
         });
 
+        const runtimeCounts = computed(() => {
+            return mcpServicesStore.services.reduce(
+                (summary, service) => {
+                    const runtimeStatus = service.runtimeStatus || "connecting";
+                    if (runtimeStatus === "ready") {
+                        summary.ready += 1;
+                    } else if (runtimeStatus === "error") {
+                        summary.error += 1;
+                    } else if (runtimeStatus === "disabled") {
+                        summary.disabled += 1;
+                    } else {
+                        summary.connecting += 1;
+                    }
+                    return summary;
+                },
+                { ready: 0, error: 0, disabled: 0, connecting: 0 },
+            );
+        });
+
         // 转换为通用列表组件格式
         const toolItems = computed(() => {
             return filteredServices.value.map(convertMcpServiceToToolItem);
@@ -104,6 +123,7 @@ export default defineComponent({
 
         const loadPageData = async () => {
             if (mcpServicesStore.isLoaded) {
+                void mcpServicesStore.refreshRuntimeState({ failSilently: true });
                 return;
             }
 
@@ -178,6 +198,19 @@ export default defineComponent({
             await mcpServicesStore.toggleService(serviceId, enabled).catch(() => undefined);
         };
 
+        const handleRefreshRuntime = async () => {
+            try {
+                await mcpServicesStore.refreshRuntimeState();
+                notifyStore.showToast({ type: "success", message: "MCP 服务状态已刷新", duration: 1800 });
+            } catch (error) {
+                notifyStore.showToast({
+                    type: "error",
+                    message: error instanceof Error ? error.message : "刷新 MCP 服务状态失败，请稍后重试。",
+                    duration: 2600,
+                });
+            }
+        };
+
         onMounted(() => {
             void loadPageData();
         });
@@ -185,8 +218,47 @@ export default defineComponent({
         const titleText = computed(() => {
             return backendStore.translate("MCP 服务");
         });
+        const subtitleText = computed(() => {
+            return backendStore.translate("查看每个 MCP 服务的运行状态、工具预览和配置错误。");
+        });
         const addButtonText = computed(() => {
             return backendStore.translate("添加 MCP 服务");
+        });
+        const refreshButtonText = computed(() => {
+            return mcpServicesStore.isRefreshingRuntime
+                ? backendStore.translate("刷新中...")
+                : backendStore.translate("刷新状态");
+        });
+        const runtimeSummaryText = computed(() => {
+            if (mcpServicesStore.isRefreshingRuntime) {
+                return backendStore.translate("正在刷新每个服务的运行状态和工具列表。");
+            }
+
+            if (mcpServicesStore.runtimeRefreshError) {
+                return mcpServicesStore.runtimeRefreshError;
+            }
+
+            if (!mcpServicesStore.services.length) {
+                return backendStore.translate("暂无 MCP 服务。");
+            }
+
+            if (runtimeCounts.value.error > 0) {
+                return backendStore.translate(`有 ${runtimeCounts.value.error} 个服务需要处理，展开条目可查看原因。`);
+            }
+
+            if (runtimeCounts.value.connecting > 0) {
+                return backendStore.translate(`有 ${runtimeCounts.value.connecting} 个服务等待检测。`);
+            }
+
+            return backendStore.translate(`已就绪 ${runtimeCounts.value.ready} 个服务，可直接查看工具预览。`);
+        });
+        const runtimeBadges = computed(() => {
+            return [
+                { key: "ready", text: `${backendStore.translate("已就绪")} ${runtimeCounts.value.ready}`, tone: "success" },
+                { key: "error", text: `${backendStore.translate("异常")} ${runtimeCounts.value.error}`, tone: "error" },
+                { key: "connecting", text: `${backendStore.translate("待检测")} ${runtimeCounts.value.connecting}`, tone: "warning" },
+                { key: "disabled", text: `${backendStore.translate("已停用")} ${runtimeCounts.value.disabled}`, tone: "neutral" },
+            ];
         });
 
         return {
@@ -200,7 +272,11 @@ export default defineComponent({
             dialogDraft,
             dialogSubmitError,
             titleText,
+            subtitleText,
             addButtonText,
+            refreshButtonText,
+            runtimeSummaryText,
+            runtimeBadges,
             handleFilterOptionClick,
             handleAddService,
             handleEditService,
@@ -208,6 +284,7 @@ export default defineComponent({
             handleSaveService,
             handleDeleteService,
             handleToggleService,
+            handleRefreshRuntime,
         };
     },
 
@@ -220,10 +297,16 @@ export default defineComponent({
                             <div class="mcp-services-page__header-left">
                                 <div class="mcp-services-page__header-content">
                                     <div class="mcp-services-page__title">{this.titleText}</div>
+                                    <div class="mcp-services-page__subtitle">{this.subtitleText}</div>
                                 </div>
                             </div>
 
                             <div class="mcp-services-page__actions">
+                                <TextButton
+                                    text={this.refreshButtonText}
+                                    onClick={this.handleRefreshRuntime}
+                                    disabled={this.mcpServicesStore.isRefreshingRuntime}
+                                />
                                 <TextButton text={this.addButtonText} onClick={this.handleAddService} />
                                 <ComboBox
                                     dropdownAlign={ComboBoxDropdownAlign.Right}
@@ -241,6 +324,28 @@ export default defineComponent({
                         <div class="mcp-services-page__content-container">
                             <div class="mcp-services-page__container">
                                 <section class="mcp-services-page__section">
+                                    <div class="mcp-services-page__runtime-summary" data-mcp-runtime-summary>
+                                        <div class="mcp-services-page__runtime-summary-copy">
+                                            <div class="mcp-services-page__runtime-summary-title">运行时状态</div>
+                                            <div class="mcp-services-page__runtime-summary-description">
+                                                {this.runtimeSummaryText}
+                                            </div>
+                                        </div>
+                                        <div class="mcp-services-page__runtime-summary-badges">
+                                            {this.runtimeBadges.map((badge) => (
+                                                <span
+                                                    class={[
+                                                        "mcp-services-page__runtime-badge",
+                                                        `mcp-services-page__runtime-badge--${badge.tone}`,
+                                                    ]}
+                                                    key={badge.key}
+                                                >
+                                                    {badge.text}
+                                                </span>
+                                            ))}
+                                        </div>
+                                    </div>
+
                                     <ToolManagementList
                                         isLoading={this.mcpServicesStore.isLoading}
                                         items={this.toolItems}

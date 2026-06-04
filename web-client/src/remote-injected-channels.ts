@@ -177,6 +177,39 @@ export async function createRemoteInjectedChannels(baseUrl = "") {
         }
     }
 
+    function buildFallbackMcpServicesResponse() {
+        return {
+            success: true,
+            services: [
+                {
+                    id: "filesystem",
+                    name: "Filesystem",
+                    description: "Local filesystem access for the agent runtime.",
+                    category: "systemBuiltIn",
+                    enabled: true,
+                    isBuiltIn: true,
+                    editable: false,
+                    removable: false,
+                    runtimeStatus: "ready",
+                    runtimeStatusText: "已就绪",
+                    runtimeDetail: "内置文件系统服务已就绪，可直接访问本地文件。",
+                    transportKind: "builtin",
+                    toolPreview: [
+                        { name: "read_file" },
+                        { name: "read_text_file" },
+                        { name: "read_multiple_files" },
+                        { name: "write_file" },
+                        { name: "edit_file" },
+                        { name: "list_directory" },
+                    ],
+                    toolCount: 14,
+                },
+            ],
+            runtimeReady: true,
+            thirdPartyAgreementAccepted: false,
+        };
+    }
+
     return {
         sessObj: {
             sessionEvent,
@@ -516,7 +549,10 @@ export async function createRemoteInjectedChannels(baseUrl = "") {
                 postServiceConfig("/service-config/set-mcp-third-party-agreement", { accepted }, true),
             ),
             getMcpServices: callbackify(async () =>
-                postServiceConfig("/service-config/get-mcp-services", {}, { success: true, services: [] }),
+                postServiceConfig("/service-config/get-mcp-services", {}, buildFallbackMcpServicesResponse()),
+            ),
+            refreshMcpRuntime: callbackify(async () =>
+                postServiceConfig("/service-config/refresh-mcp-runtime", {}, buildFallbackMcpServicesResponse()),
             ),
             setMcpServiceEnabled: callbackify(async (serviceId: string, enabled: boolean) =>
                 postServiceConfig("/service-config/set-mcp-service-enabled", { serviceId, enabled }, null),

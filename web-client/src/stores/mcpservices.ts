@@ -14,6 +14,10 @@ interface McpServicesResponse {
     thirdPartyAgreementAccepted?: boolean;
 }
 
+interface RefreshRuntimeOptions {
+    failSilently?: boolean;
+}
+
 const getBackendStore = () => {
     const backend = useBackendStore();
 
@@ -39,7 +43,9 @@ export const useMcpServicesStore = defineStore("mcpServices", {
         services: [] as McpService[],
         isLoading: false,
         isLoaded: false,
+        isRefreshingRuntime: false,
         runtimeReady: false,
+        runtimeRefreshError: "",
         thirdPartyAgreementAccepted: false,
         hasLoadedThirdPartyAgreement: false,
     }),
@@ -73,11 +79,40 @@ export const useMcpServicesStore = defineStore("mcpServices", {
                 );
                 this.syncResponseState(response);
                 this.isLoaded = true;
+                void this.refreshRuntimeState({ failSilently: true });
             } catch (error) {
                 console.error("[mcpServicesStore] Failed to load MCP services page data", error);
                 throw error;
             } finally {
                 this.isLoading = false;
+            }
+        },
+
+        async refreshRuntimeState(options: RefreshRuntimeOptions = {}) {
+            this.isRefreshingRuntime = true;
+            this.runtimeRefreshError = "";
+
+            try {
+                const backend = getBackendStore();
+                const response = unwrapResponse(
+                    await backend.requestServiceConfig("refreshMcpRuntime"),
+                    "刷新 MCP 运行时状态失败，请稍后重试。",
+                );
+                this.syncResponseState(response);
+                return response;
+            } catch (error) {
+                const message =
+                    error instanceof Error
+                        ? error.message
+                        : "刷新 MCP 运行时状态失败，请稍后重试。";
+                this.runtimeRefreshError = message;
+                console.error("[mcpServicesStore] Failed to refresh MCP runtime state", error);
+                if (!options.failSilently) {
+                    throw error;
+                }
+                return null;
+            } finally {
+                this.isRefreshingRuntime = false;
             }
         },
 
@@ -89,6 +124,7 @@ export const useMcpServicesStore = defineStore("mcpServices", {
                     "更新 MCP 服务状态失败，请稍后重试。",
                 );
                 this.syncResponseState(response);
+                void this.refreshRuntimeState({ failSilently: true });
             } catch (error) {
                 console.error(`[mcpServicesStore] Failed to toggle service "${serviceId}"`, error);
                 throw error;
@@ -108,6 +144,7 @@ export const useMcpServicesStore = defineStore("mcpServices", {
                     "保存 MCP 服务失败，请稍后重试。",
                 );
                 this.syncResponseState(response);
+                void this.refreshRuntimeState({ failSilently: true });
             } catch (error) {
                 console.error("[mcpServicesStore] Failed to save custom service", error);
                 throw error;
@@ -122,6 +159,7 @@ export const useMcpServicesStore = defineStore("mcpServices", {
                     "删除 MCP 服务失败，请稍后重试。",
                 );
                 this.syncResponseState(response);
+                void this.refreshRuntimeState({ failSilently: true });
             } catch (error) {
                 console.error(`[mcpServicesStore] Failed to delete service "${serviceId}"`, error);
                 throw error;
