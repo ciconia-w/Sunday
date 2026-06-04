@@ -575,7 +575,7 @@ export async function createRemoteInjectedChannels(baseUrl = "") {
                         },
                         entries: [],
                     },
-                    supportedReplyTransports: ["webhook", "lark-bot-webhook", "slack-webhook", "discord-webhook"],
+                    supportedReplyTransports: ["webhook", "lark-bot-webhook", "dingtalk-bot-webhook", "slack-webhook", "discord-webhook"],
                     replyRetryPolicy: {
                         maxAttempts: 1,
                         delaysMs: [],
@@ -586,6 +586,14 @@ export async function createRemoteInjectedChannels(baseUrl = "") {
                         delaysMs: [],
                         mode: "in-process",
                         hasDedicatedReplayService: false,
+                        deliveryPolicy: {
+                            strategy: "fixed",
+                            delaysMs: [],
+                            maxAutomaticAttempts: 0,
+                            initialDelayMs: 0,
+                            maxDelayMs: 0,
+                            multiplier: 1,
+                        },
                         serviceStatus: {
                             enabled: false,
                             running: false,
@@ -595,6 +603,8 @@ export async function createRemoteInjectedChannels(baseUrl = "") {
                             lastHeartbeatAt: "",
                             lastRunAt: "",
                             lastError: "",
+                            manager: "none",
+                            managedBySidecar: false,
                         },
                     },
                     runtimeNote: "service-config unavailable",

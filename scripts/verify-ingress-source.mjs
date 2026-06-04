@@ -30,6 +30,10 @@ const checks = {
     ingressSupportsSlackWebhookTransport: externalIngressSource.includes("slack-webhook")
         && externalIngressSource.includes("buildSlackReplyBody")
         && externalIngressSource.includes("postSlackWebhookReply"),
+    ingressSupportsDingtalkWebhookTransport: externalIngressSource.includes("dingtalk-bot-webhook")
+        && externalIngressSource.includes("buildDingtalkReplyBody")
+        && externalIngressSource.includes("postDingtalkBotWebhookReply")
+        && externalIngressSource.includes("createDingtalkBotSignature"),
     ingressSupportsDiscordWebhookTransport: externalIngressSource.includes("discord-webhook")
         && externalIngressSource.includes("buildDiscordReplyBody")
         && externalIngressSource.includes("postDiscordWebhookReply"),
@@ -53,6 +57,10 @@ const checks = {
         && externalIngressSource.includes("usesDedicatedBackgroundReplayService")
         && externalIngressSource.includes("serviceStatus")
         && externalIngressSource.includes("runtimeNote"),
+    ingressSupportsStandaloneReplayServiceMode: externalIngressSource.includes("standalone-service")
+        && externalIngressSource.includes("usesStandaloneBackgroundReplayService")
+        && ingressReplayWorkerSource.includes("managedBySidecar")
+        && devServerSource.includes("usesSidecarManagedBackgroundReplayService"),
     ingressReplayWorkerPollsOperatorApi: ingressReplayWorkerSource.includes("/ingress/get-replay-queue")
         && ingressReplayWorkerSource.includes("/ingress/replay-queue/replay")
         && ingressReplayWorkerSource.includes("getBackgroundReplayServiceStatusPath"),
@@ -82,6 +90,9 @@ const checks = {
     docExplainsSlackAndBackgroundReplay: ingressDocSource.includes("slack-webhook")
         && ingressDocSource.includes("background replay")
         && ingressDocSource.includes("PERSONAL_AGENT_INGRESS_BACKGROUND_REPLAY_DELAYS_MS"),
+    docExplainsDingtalkAndStandaloneReplay: ingressDocSource.includes("dingtalk-bot-webhook")
+        && ingressDocSource.includes("standalone-service")
+        && ingressDocSource.includes("PERSONAL_AGENT_INGRESS_BACKGROUND_REPLAY_STRATEGY"),
     docExplainsDiscordAndReplayService: ingressDocSource.includes("discord-webhook")
         && ingressDocSource.includes("PERSONAL_AGENT_INGRESS_BACKGROUND_REPLAY_MODE")
         && ingressDocSource.includes("external-ingress-replay-service-status.json"),

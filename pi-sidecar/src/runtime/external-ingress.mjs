@@ -5,6 +5,7 @@ import { dirname, resolve } from "node:path";
 const SUPPORTED_REPLY_TRANSPORTS = [
     "webhook",
     "lark-bot-webhook",
+    "dingtalk-bot-webhook",
     "slack-webhook",
     "discord-webhook",
 ];
@@ -50,6 +51,11 @@ function normalizeRetryDelays(value, fallback) {
     return normalized.length > 0 ? normalized : fallback;
 }
 
+function normalizePositiveNumber(value, fallback) {
+    const parsed = Number.parseFloat(String(value ?? ""));
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
 function normalizeReplyTransport(value) {
     const normalized = typeof value === "string" ? value.trim() : "";
     if (!normalized) {
@@ -68,15 +74,85 @@ function normalizeReplyTransport(value) {
         return "discord-webhook";
     }
 
+    if (normalized === "dingtalk-webhook" || normalized === "dingtalk-custom-bot-webhook") {
+        return "dingtalk-bot-webhook";
+    }
+
     return normalized;
 }
 
 export function normalizeBackgroundReplayMode(value) {
-    return value === "service" ? "service" : "in-process";
+    return value === "service" || value === "standalone-service" ? value : "in-process";
+}
+
+export function backgroundReplayModeUsesDedicatedService(value) {
+    const normalized = normalizeBackgroundReplayMode(value);
+    return normalized === "service" || normalized === "standalone-service";
 }
 
 export function getBackgroundReplayServiceStatusPath(runtimeDir) {
     return resolve(runtimeDir, "external-ingress-replay-service-status.json");
+}
+
+function normalizeBackgroundReplayStrategy(value) {
+    return value === "exponential" ? "exponential" : "fixed";
+}
+
+function buildBackgroundReplayPolicy() {
+    const strategy = normalizeBackgroundReplayStrategy(
+        String(process.env.PERSONAL_AGENT_INGRESS_BACKGROUND_REPLAY_STRATEGY ?? "fixed").trim(),
+    );
+    const fallbackDelaysMs = [30000, 120000, 300000];
+    const configuredDelaysMs = normalizeRetryDelays(
+        process.env.PERSONAL_AGENT_INGRESS_BACKGROUND_REPLAY_DELAYS_MS,
+        fallbackDelaysMs,
+    );
+
+    if (strategy === "fixed") {
+        return {
+            strategy,
+            delaysMs: configuredDelaysMs,
+            maxAutomaticAttempts: configuredDelaysMs.length,
+            initialDelayMs: configuredDelaysMs[0] ?? 0,
+            maxDelayMs: configuredDelaysMs[configuredDelaysMs.length - 1] ?? 0,
+            multiplier: 1,
+        };
+    }
+
+    const initialDelayMs = normalizeNonNegativeInteger(
+        process.env.PERSONAL_AGENT_INGRESS_BACKGROUND_REPLAY_INITIAL_DELAY_MS,
+        configuredDelaysMs[0] ?? fallbackDelaysMs[0],
+    );
+    const maxDelayMs = Math.max(
+        initialDelayMs,
+        normalizeNonNegativeInteger(
+            process.env.PERSONAL_AGENT_INGRESS_BACKGROUND_REPLAY_MAX_DELAY_MS,
+            configuredDelaysMs[configuredDelaysMs.length - 1] ?? fallbackDelaysMs[fallbackDelaysMs.length - 1],
+        ),
+    );
+    const multiplier = normalizePositiveNumber(
+        process.env.PERSONAL_AGENT_INGRESS_BACKGROUND_REPLAY_BACKOFF_MULTIPLIER,
+        2,
+    );
+    const maxAutomaticAttempts = Math.max(
+        1,
+        normalizeNonNegativeInteger(
+            process.env.PERSONAL_AGENT_INGRESS_BACKGROUND_REPLAY_MAX_ATTEMPTS,
+            configuredDelaysMs.length || fallbackDelaysMs.length,
+        ),
+    );
+    const delaysMs = Array.from({ length: maxAutomaticAttempts }, (_, index) =>
+        Math.min(maxDelayMs, Math.round(initialDelayMs * (multiplier ** index))),
+    );
+
+    return {
+        strategy,
+        delaysMs,
+        maxAutomaticAttempts,
+        initialDelayMs,
+        maxDelayMs,
+        multiplier,
+    };
 }
 
 function normalizeReplyTarget(body) {
@@ -114,7 +190,7 @@ function normalizeReplyTarget(body) {
         transport,
         url: parsedUrl.toString(),
         headers: normalizeHeaderMap(body?.replyWebhookHeaders),
-        secret: transport === "lark-bot-webhook" ? secret : "",
+        secret: ["lark-bot-webhook", "dingtalk-bot-webhook"].includes(transport) ? secret : "",
     };
 }
 
@@ -218,10 +294,8 @@ export class ExternalIngress {
         this.backgroundReplayMode = normalizeBackgroundReplayMode(
             String(process.env.PERSONAL_AGENT_INGRESS_BACKGROUND_REPLAY_MODE ?? "in-process").trim(),
         );
-        this.backgroundReplayDelaysMs = normalizeRetryDelays(
-            process.env.PERSONAL_AGENT_INGRESS_BACKGROUND_REPLAY_DELAYS_MS,
-            [30000, 120000, 300000],
-        );
+        this.backgroundReplayPolicy = buildBackgroundReplayPolicy();
+        this.backgroundReplayDelaysMs = [...this.backgroundReplayPolicy.delaysMs];
         this.backgroundReplayPollMs = normalizeNonNegativeInteger(
             process.env.PERSONAL_AGENT_INGRESS_BACKGROUND_REPLAY_POLL_MS,
             5000,
@@ -312,7 +386,15 @@ export class ExternalIngress {
     }
 
     usesDedicatedBackgroundReplayService() {
+        return this.backgroundReplayEnabled && backgroundReplayModeUsesDedicatedService(this.backgroundReplayMode);
+    }
+
+    usesSidecarManagedBackgroundReplayService() {
         return this.backgroundReplayEnabled && this.backgroundReplayMode === "service";
+    }
+
+    usesStandaloneBackgroundReplayService() {
+        return this.backgroundReplayEnabled && this.backgroundReplayMode === "standalone-service";
     }
 
     setBackgroundReplayServiceSupervisorStateProvider(provider) {
@@ -428,6 +510,8 @@ export class ExternalIngress {
                 enabled: this.backgroundReplayEnabled,
                 pollMs: this.backgroundReplayPollMs,
                 delaysMs: [...this.backgroundReplayDelaysMs],
+                strategy: this.backgroundReplayPolicy.strategy,
+                maxAutomaticAttempts: this.backgroundReplayPolicy.maxAutomaticAttempts,
             },
             counts,
             entries,
@@ -445,6 +529,12 @@ export class ExternalIngress {
             lastHeartbeatAt: "",
             lastRunAt: "",
             lastError: "",
+            manager: this.backgroundReplayMode === "service"
+                ? "sidecar"
+                : this.backgroundReplayMode === "standalone-service"
+                    ? "external"
+                    : "none",
+            managedBySidecar: this.backgroundReplayMode === "service",
         };
 
         let fileStatus = {};
@@ -458,6 +548,8 @@ export class ExternalIngress {
                 lastHeartbeatAt: typeof parsed?.lastHeartbeatAt === "string" ? parsed.lastHeartbeatAt : "",
                 lastRunAt: typeof parsed?.lastRunAt === "string" ? parsed.lastRunAt : "",
                 lastError: typeof parsed?.lastError === "string" ? parsed.lastError : "",
+                manager: typeof parsed?.manager === "string" ? parsed.manager : "",
+                managedBySidecar: parsed?.managedBySidecar === true,
             };
         } catch {
             fileStatus = {};
@@ -466,14 +558,25 @@ export class ExternalIngress {
         const supervisorStatus = this.backgroundReplayServiceSupervisorStateProvider
             ? (this.backgroundReplayServiceSupervisorStateProvider() ?? {})
             : {};
+        const supervisorManagedBySidecar = supervisorStatus?.managedBySidecar === true;
+        const mergedPid = supervisorManagedBySidecar
+            ? normalizeNonNegativeInteger(supervisorStatus?.pid, 0)
+            : normalizeNonNegativeInteger(fileStatus?.pid, 0);
+        const mergedManager = supervisorManagedBySidecar
+            ? "sidecar"
+            : (typeof fileStatus?.manager === "string" && fileStatus.manager.trim()
+                ? fileStatus.manager
+                : baseStatus.manager);
 
         const merged = {
             ...baseStatus,
             ...fileStatus,
             ...supervisorStatus,
             enabled,
-            pid: normalizeNonNegativeInteger(supervisorStatus?.pid ?? fileStatus?.pid, 0),
-            restartCount: normalizeNonNegativeInteger(supervisorStatus?.restartCount, 0),
+            pid: mergedPid,
+            restartCount: supervisorManagedBySidecar
+                ? normalizeNonNegativeInteger(supervisorStatus?.restartCount, 0)
+                : 0,
             startedAt: typeof (fileStatus?.startedAt ?? supervisorStatus?.startedAt) === "string"
                 ? (fileStatus?.startedAt ?? supervisorStatus?.startedAt)
                 : "",
@@ -483,9 +586,13 @@ export class ExternalIngress {
             lastRunAt: typeof (fileStatus?.lastRunAt ?? supervisorStatus?.lastRunAt) === "string"
                 ? (fileStatus?.lastRunAt ?? supervisorStatus?.lastRunAt)
                 : "",
-            lastError: typeof (supervisorStatus?.lastError ?? fileStatus?.lastError) === "string"
-                ? (supervisorStatus?.lastError ?? fileStatus?.lastError)
-                : "",
+            lastError: supervisorManagedBySidecar
+                ? (typeof (supervisorStatus?.lastError ?? fileStatus?.lastError) === "string"
+                    ? (supervisorStatus?.lastError ?? fileStatus?.lastError)
+                    : "")
+                : (typeof fileStatus?.lastError === "string" ? fileStatus.lastError : ""),
+            manager: mergedManager,
+            managedBySidecar: supervisorManagedBySidecar,
         };
 
         if (!enabled) {
@@ -510,8 +617,12 @@ export class ExternalIngress {
         let runtimeNote = "background replay 已关闭。";
         if (this.backgroundReplayEnabled && this.backgroundReplayMode === "service") {
             runtimeNote = backgroundReplayServiceStatus.running
-                ? "当前 background replay 由 dedicated replay service 驱动；sidecar 继续保有 route / replay queue 与 operator API。"
-                : "当前 background replay 已切到 dedicated replay service 模式，但 worker 暂未进入稳定运行态。";
+                ? "当前 background replay 由 sidecar 管理的 dedicated replay service 驱动；sidecar 继续保有 route / replay queue 与 operator API。"
+                : "当前 background replay 已切到 sidecar-managed dedicated replay service 模式，但 worker 暂未进入稳定运行态。";
+        } else if (this.backgroundReplayEnabled && this.backgroundReplayMode === "standalone-service") {
+            runtimeNote = backgroundReplayServiceStatus.running
+                ? "当前 background replay 由独立 replay service 驱动；sidecar 只保有 route / replay queue 与 operator API。"
+                : "当前 background replay 已切到 standalone replay service 模式，但外部 worker 暂未进入稳定运行态。";
         } else if (this.backgroundReplayEnabled) {
             runtimeNote = "当前 background replay worker 仍运行在 sidecar 进程内；更强的 delivery reliability 仍需要 dedicated replay service。";
         }
@@ -529,7 +640,15 @@ export class ExternalIngress {
                 pollMs: this.backgroundReplayPollMs,
                 delaysMs: [...this.backgroundReplayDelaysMs],
                 mode: this.backgroundReplayMode,
-                hasDedicatedReplayService: this.backgroundReplayMode === "service",
+                hasDedicatedReplayService: backgroundReplayModeUsesDedicatedService(this.backgroundReplayMode),
+                deliveryPolicy: {
+                    strategy: this.backgroundReplayPolicy.strategy,
+                    delaysMs: [...this.backgroundReplayDelaysMs],
+                    maxAutomaticAttempts: this.backgroundReplayPolicy.maxAutomaticAttempts,
+                    initialDelayMs: this.backgroundReplayPolicy.initialDelayMs,
+                    maxDelayMs: this.backgroundReplayPolicy.maxDelayMs,
+                    multiplier: this.backgroundReplayPolicy.multiplier,
+                },
                 serviceStatus: backgroundReplayServiceStatus,
             },
             runtimeNote,
@@ -793,6 +912,19 @@ export class ExternalIngress {
         };
     }
 
+    createDingtalkBotSignature(secret) {
+        const timestamp = String(Date.now());
+        const stringToSign = `${timestamp}\n${secret}`;
+        const sign = encodeURIComponent(
+            createHmac("sha256", secret).update(stringToSign).digest("base64"),
+        );
+
+        return {
+            timestamp,
+            sign,
+        };
+    }
+
     buildLarkBotReplyBody(replyTarget, payload) {
         const body = {
             msg_type: "text",
@@ -813,6 +945,15 @@ export class ExternalIngress {
     buildSlackReplyBody(payload) {
         return {
             text: formatPlainTextReply(payload),
+        };
+    }
+
+    buildDingtalkReplyBody(payload) {
+        return {
+            msgtype: "text",
+            text: {
+                content: formatPlainTextReply(payload),
+            },
         };
     }
 
@@ -879,6 +1020,37 @@ export class ExternalIngress {
 
         if (!response.ok) {
             throw new Error(`Slack webhook returned HTTP ${response.status}`);
+        }
+
+        return {
+            ok: true,
+            transport: replyTarget.transport,
+            status: response.status,
+            providerPayload: body,
+        };
+    }
+
+    async postDingtalkBotWebhookReply(replyTarget, payload) {
+        const body = this.buildDingtalkReplyBody(payload);
+        const targetUrl = new URL(replyTarget.url);
+
+        if (replyTarget.secret) {
+            const signature = this.createDingtalkBotSignature(replyTarget.secret);
+            targetUrl.searchParams.set("timestamp", signature.timestamp);
+            targetUrl.searchParams.set("sign", signature.sign);
+        }
+
+        const response = await fetch(targetUrl.toString(), {
+            method: "POST",
+            headers: {
+                "content-type": "application/json; charset=utf-8",
+                ...replyTarget.headers,
+            },
+            body: JSON.stringify(body),
+        });
+
+        if (!response.ok) {
+            throw new Error(`DingTalk bot webhook returned HTTP ${response.status}`);
         }
 
         return {
@@ -1110,6 +1282,10 @@ export class ExternalIngress {
 
         if (replyTarget.transport === "slack-webhook") {
             return this.postSlackWebhookReply(replyTarget, payload);
+        }
+
+        if (replyTarget.transport === "dingtalk-bot-webhook") {
+            return this.postDingtalkBotWebhookReply(replyTarget, payload);
         }
 
         if (replyTarget.transport === "discord-webhook") {

@@ -301,7 +301,7 @@ export function ensureDevInjectedChannels() {
                 counts,
                 entries: visibleReplayEntries,
             },
-            supportedReplyTransports: ["webhook", "lark-bot-webhook", "slack-webhook", "discord-webhook"],
+            supportedReplyTransports: ["webhook", "lark-bot-webhook", "dingtalk-bot-webhook", "slack-webhook", "discord-webhook"],
             replyRetryPolicy: {
                 maxAttempts: 3,
                 delaysMs: [1000, 3000],
@@ -312,6 +312,14 @@ export function ensureDevInjectedChannels() {
                 delaysMs: [30000, 120000, 300000],
                 mode: "in-process",
                 hasDedicatedReplayService: false,
+                deliveryPolicy: {
+                    strategy: "fixed",
+                    delaysMs: [30000, 120000, 300000],
+                    maxAutomaticAttempts: 3,
+                    initialDelayMs: 30000,
+                    maxDelayMs: 300000,
+                    multiplier: 1,
+                },
                 serviceStatus: {
                     enabled: false,
                     running: false,
@@ -321,6 +329,8 @@ export function ensureDevInjectedChannels() {
                     lastHeartbeatAt: "",
                     lastRunAt: "",
                     lastError: "",
+                    manager: "none",
+                    managedBySidecar: false,
                 },
             },
             runtimeNote: "当前 background replay worker 仍运行在 sidecar 进程内；更强的 delivery reliability 仍需要 dedicated replay service。",

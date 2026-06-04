@@ -298,8 +298,10 @@ try {
         initialPayload.routes.some((route) => route.routeKey === `${source}:${channelId}:${threadId}`) &&
         Array.isArray(initialPayload.supportedReplyTransports) &&
         initialPayload.supportedReplyTransports.includes("slack-webhook") &&
+        initialPayload.supportedReplyTransports.includes("dingtalk-bot-webhook") &&
         initialPayload.supportedReplyTransports.includes("discord-webhook") &&
         initialPayload.backgroundReplay?.mode === "in-process" &&
+        initialPayload.backgroundReplay?.deliveryPolicy?.strategy === "fixed" &&
         initialPayload.backgroundReplay?.serviceStatus?.enabled === false &&
         typeof initialPayload.runtimeNote === "string" &&
         initialPayload.runtimeNote.includes("background replay") &&
