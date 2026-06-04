@@ -26,6 +26,7 @@ import {
 } from "./runtime/browser-control.mjs";
 import { getCliToolsState } from "./runtime/cli-tools-status.mjs";
 import { getModel } from "@earendil-works/pi-ai";
+import { UosSessionEvent } from "./runtime/channel-types.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const bridgeDir = resolve(__dirname, "bridge");
@@ -109,6 +110,7 @@ const state = {
 
 const clients = new Set();
 const demoPendingApprovals = new Map();
+const sessionRenderState = new Map();
 const sessionBridge = new PiSessionBridge({
     cwd: workspaceDir,
     agentDir: runtimeDir,
@@ -198,7 +200,91 @@ function emitSession(event, sessionId, message) {
     }
 }
 
+async function persistHeadlessSessionRender(event, sessionId, message) {
+    if (event === UosSessionEvent.SeStarted) {
+        sessionRenderState.set(sessionId, {
+            conversationId: "",
+            renderItems: [],
+        });
+        return;
+    }
+
+    if (event === UosSessionEvent.SeMessage) {
+        try {
+            const parsed = JSON.parse(message);
+            const current = sessionRenderState.get(sessionId) ?? {
+                conversationId: "",
+                renderItems: [],
+            };
+
+            if (typeof parsed?.conversation_id === "string" && parsed.conversation_id.trim()) {
+                current.conversationId = parsed.conversation_id.trim();
+            }
+
+            if (typeof parsed?.type === "string") {
+                if (parsed.type === "text" && typeof parsed?.data?.content === "string") {
+                    const lastItem = current.renderItems[current.renderItems.length - 1];
+                    if (lastItem?.type === "text" && typeof lastItem?.data?.content === "string") {
+                        lastItem.data.content += parsed.data.content;
+                    } else {
+                        current.renderItems.push({
+                            type: "text",
+                            data: {
+                                content: parsed.data.content,
+                            },
+                        });
+                    }
+                } else {
+                    current.renderItems.push({
+                        type: parsed.type,
+                        data: parsed.data ?? {},
+                    });
+                }
+            }
+
+            sessionRenderState.set(sessionId, current);
+        } catch {
+            // ignore malformed or non-JSON message payloads
+        }
+        return;
+    }
+
+    if (event === UosSessionEvent.SeFinished) {
+        const current = sessionRenderState.get(sessionId);
+        sessionRenderState.delete(sessionId);
+
+        if (!current?.conversationId) {
+            return;
+        }
+
+        try {
+            const parsed = JSON.parse(message);
+            const messageId = typeof parsed?.id === "string" ? parsed.id.trim() : "";
+            if (!messageId) {
+                return;
+            }
+
+            await conversationRepository.setConversationRender(
+                current.conversationId,
+                messageId,
+                JSON.stringify(current.renderItems),
+            );
+            await conversationRepository.saveConversation(current.conversationId);
+        } catch (error) {
+            console.error("[dev-server] failed to persist headless session render:", error);
+        }
+        return;
+    }
+
+    if (event === UosSessionEvent.SeError) {
+        sessionRenderState.delete(sessionId);
+    }
+}
+
 sessionBridge.sessionEvent.connect((event, sessionId, message) => {
+    persistHeadlessSessionRender(event, sessionId, message).catch((error) => {
+        console.error("[dev-server] background session render persistence failed:", error);
+    });
     emitSession(event, sessionId, message);
 });
 

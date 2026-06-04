@@ -124,6 +124,10 @@ Date: 2026-06-03
   - 可直接打开来源说明文档、用户目录和仓库目录
 - skills API verifier 现在会在临时 skills root 下验证导入/删除闭环，不会污染真实 `~/.codex/skills`
 - `CLI tools` 已具备 sidecar 统一状态模型
+- external ingress 现在已具备 canonical sidecar contract：
+  - `POST /ingress/message`
+  - `source + channelId + threadId` 的稳定 conversation / session 路由
+  - headless ingress reply 的 conversation 持久化
 - `browser control` 已具备默认关闭、按需启用、按需注册工具的基础能力
 - Qt host 的 `serviceConfig` 已补齐浏览器 / CLI / MCP 基本 runtime bridge
 - 浏览器运行时能力画像已下沉到 sidecar：`stableTabSwitch`、`stableScreenshotCapture`、`runtimeLimitNotice`、`knownIssues` 由 `browser-control.mjs` 统一给出，前端不再直接写死 OpenCLI 版本判断
@@ -204,7 +208,9 @@ Date: 2026-06-03
     - clearer error feedback
 3. skills / CLI productization:
    - CLI install / update 路线继续产品化
-4. 然后再进入更大的扩展平台方向：
-   - IM bridge
+4. IM bridge refinement:
+   - reply push / transport adapter
+   - provider-specific ingress integration
+5. 然后再进入更大的扩展平台方向：
    - extension install / market flows
    - architecture / performance cleanup

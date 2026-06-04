@@ -116,14 +116,22 @@ Current reusable surfaces:
 - `taskObj` can already act as a deferred prompt / external event ingress
 - conversation/session APIs are stable enough for external message injection
 
+Current state:
+
+- canonical `/ingress/message` contract now exists in sidecar
+- default routing is stable by `source + channelId + threadId`
+- follow-up messages can auto-link to the current conversation tail even without a frontend participant
+- headless ingress replies can now be persisted back into conversation history after session completion
+
 Current gaps:
 
-- no canonical external-message ingress contract yet
-- no persisted mapping from external thread/channel to conversation/session
+- reply push / transport adapters are still missing
+- platform-specific bridge logic still needs to be layered on top of the generic ingress contract
 
 Recommended next step:
 
-- define a sidecar ingress API for external message delivery
+- keep `/ingress/message` as the canonical sidecar ingress contract
+- add provider-specific push/reply adapters above it
 - use `taskObj` only if host-level delivery is required
 
 ### 4. Other Extensions

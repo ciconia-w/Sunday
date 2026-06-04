@@ -516,6 +516,22 @@ export class ConversationRepository {
         return this.loadConversation(conversationId);
     }
 
+    async getConversationTailMessageId(conversationId) {
+        const conversation = await this.loadConversation(conversationId);
+        const messages = conversation?.messages ?? {};
+        const visited = new Set();
+        let currentId = conversation?.root?.cur_next ?? conversation?.root?.next?.[0] ?? "";
+        let lastSeenId = "";
+
+        while (currentId && messages[currentId] && !visited.has(currentId)) {
+            visited.add(currentId);
+            lastSeenId = currentId;
+            currentId = messages[currentId]?.cur_next ?? "";
+        }
+
+        return lastSeenId;
+    }
+
     async deleteConversation(ids) {
         await this.ensureReady();
         for (const id of ids ?? []) {
