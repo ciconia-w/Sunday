@@ -514,7 +514,7 @@ export default defineComponent({
                         <div class="settings-page__row">
                             <div>
                                 <div class="settings-page__row-title">技能 / CLI / MCP</div>
-                                <div class="settings-page__row-desc">统一管理技能、CLI 工具和 MCP 服务。</div>
+                                <div class="settings-page__row-desc">统一管理技能、CLI 工具、MCP 服务和 IM Bridge。</div>
                             </div>
                             <CommonButton text="打开" variant="primary" onClick={this.openExtensions} />
                         </div>

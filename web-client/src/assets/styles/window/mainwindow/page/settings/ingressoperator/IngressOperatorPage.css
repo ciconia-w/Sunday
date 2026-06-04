@@ -1,0 +1,214 @@
+.ingress-operator-page__stack {
+    gap: 16px;
+}
+
+.ingress-operator-page__toggle {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.ingress-operator-page__toggle-label {
+    color: var(--uosai-color-text-secondary);
+    font-size: 13px;
+    line-height: 1.4;
+}
+
+.ingress-operator-page__summary-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 12px;
+}
+
+.ingress-operator-page__summary-card,
+.ingress-operator-page__panel {
+    border: 1px solid var(--uosai-color-line-default);
+    border-radius: 8px;
+    background: var(--uosai-color-bg-secondary);
+}
+
+.ingress-operator-page__summary-card {
+    padding: 14px 16px;
+    min-height: 88px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+}
+
+.ingress-operator-page__summary-label,
+.ingress-operator-page__panel-subtitle,
+.ingress-operator-page__fact-label,
+.ingress-operator-page__row-meta,
+.ingress-operator-page__note,
+.ingress-operator-page__empty {
+    color: var(--uosai-color-text-secondary);
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+.ingress-operator-page__summary-value {
+    color: var(--skills-page-title-color);
+    font-size: 28px;
+    line-height: 1.2;
+    font-weight: 700;
+}
+
+.ingress-operator-page__panel {
+    padding: 16px 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.ingress-operator-page__panel-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px 12px;
+}
+
+.ingress-operator-page__panel-title,
+.ingress-operator-page__row-title,
+.ingress-operator-page__fact-value {
+    color: var(--skills-page-title-color);
+}
+
+.ingress-operator-page__panel-title {
+    font-size: 15px;
+    line-height: 1.4;
+    font-weight: 600;
+}
+
+.ingress-operator-page__fact-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 12px;
+}
+
+.ingress-operator-page__fact-item {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+}
+
+.ingress-operator-page__fact-value {
+    font-size: 14px;
+    line-height: 1.5;
+    font-weight: 500;
+    word-break: break-word;
+}
+
+.ingress-operator-page__note {
+    padding: 12px;
+    border-radius: 8px;
+    background: rgba(0, 129, 255, 0.06);
+}
+
+.ingress-operator-page__error {
+    color: rgba(183, 62, 62, 1);
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+.ingress-operator-page__list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.ingress-operator-page__list-row {
+    padding: 14px 16px;
+    border-radius: 8px;
+    background: var(--uosai-color-bg-primary);
+    border: 1px solid rgba(0, 0, 0, 0.05);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+html.dark .ingress-operator-page__list-row {
+    border-color: rgba(255, 255, 255, 0.06);
+}
+
+.ingress-operator-page__row-topline {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.ingress-operator-page__row-title {
+    font-size: 14px;
+    line-height: 1.4;
+    font-weight: 600;
+    word-break: break-word;
+}
+
+.ingress-operator-page__row-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 12px;
+}
+
+.ingress-operator-page__row-preview,
+.ingress-operator-page__row-detail {
+    color: var(--uosai-color-text-primary);
+    font-size: 13px;
+    line-height: 1.5;
+    word-break: break-word;
+}
+
+.ingress-operator-page__row-detail {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.ingress-operator-page__row-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.ingress-operator-page__badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 24px;
+    padding: 0 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    line-height: 1;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.ingress-operator-page__badge--success {
+    background: rgba(33, 176, 88, 0.12);
+    color: rgba(20, 140, 68, 1);
+}
+
+.ingress-operator-page__badge--warning {
+    background: rgba(255, 173, 51, 0.15);
+    color: rgba(162, 97, 0, 1);
+}
+
+.ingress-operator-page__badge--error {
+    background: rgba(214, 84, 84, 0.12);
+    color: rgba(183, 62, 62, 1);
+}
+
+.ingress-operator-page__badge--neutral {
+    background: rgba(0, 0, 0, 0.06);
+    color: var(--uosai-color-text-secondary);
+}
+
+html.dark .ingress-operator-page__note {
+    background: rgba(134, 202, 255, 0.08);
+}
+
+html.dark .ingress-operator-page__badge--neutral {
+    background: rgba(255, 255, 255, 0.08);
+}

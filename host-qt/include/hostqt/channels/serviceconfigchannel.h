@@ -37,6 +37,9 @@ public slots:
     QJsonObject browserSelectTab(const QString &pageId) const;
     QJsonObject browserExtractPage() const;
     QJsonObject browserCaptureScreenshot(const QString &outputPath) const;
+    QJsonObject getIngressOperatorState(bool includeResolved = false) const;
+    QJsonObject replayIngressQueueEntry(const QString &id) const;
+    QJsonObject resolveIngressQueueEntry(const QString &id, const QString &resolution) const;
     QJsonObject getModelConfig() const;
     QJsonObject saveModelConfig(
         const QString &provider,

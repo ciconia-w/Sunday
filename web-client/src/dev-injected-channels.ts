@@ -198,6 +198,124 @@ export function ensureDevInjectedChannels() {
             toolCount: 14,
         },
     ];
+    const buildMockIngressOperatorState = (includeResolved = false) => {
+        const routes = [
+            {
+                routeKey: "slack:alerts:thread-001",
+                source: "slack",
+                channelId: "alerts",
+                threadId: "thread-001",
+                conversationId: "ext-conv-slack-alerts-thread-001",
+                sessionId: "ext-sess-slack-alerts-thread-001",
+                replyTarget: {
+                    transport: "slack-webhook",
+                    url: "https://hooks.slack.com/services/demo/demo/demo",
+                    hasSecret: false,
+                    headerKeys: [],
+                },
+                updatedAt: "2026-06-04T13:30:00.000Z",
+            },
+        ];
+        const replayEntries = [
+            {
+                id: "demo-replay-pending",
+                status: "awaiting-operator",
+                transport: "slack-webhook",
+                routeKey: "slack:alerts:thread-001",
+                conversationId: "ext-conv-slack-alerts-thread-001",
+                sessionId: "ext-sess-slack-alerts-thread-001",
+                requestExternalMessageId: "ext-msg-demo-1",
+                replyTarget: {
+                    transport: "slack-webhook",
+                    url: "https://hooks.slack.com/services/demo/demo/demo",
+                    hasSecret: false,
+                    headerKeys: [],
+                },
+                payloadSummary: {
+                    ok: false,
+                    assistantTextPreview: "",
+                    errorPreview: "Sunday 处理失败：demo webhook timeout",
+                },
+                attemptCount: 3,
+                replayCount: 1,
+                automaticReplayCount: 3,
+                latestError: "demo webhook timeout",
+                createdAt: "2026-06-04T13:20:00.000Z",
+                updatedAt: "2026-06-04T13:25:00.000Z",
+                deliveredAt: "",
+                resolvedAt: "",
+                nextAttemptAt: "",
+                lastAttemptAt: "2026-06-04T13:25:00.000Z",
+            },
+            {
+                id: "demo-replay-resolved",
+                status: "resolved",
+                transport: "webhook",
+                routeKey: "webhook:ops:thread-009",
+                conversationId: "ext-conv-webhook-ops-thread-009",
+                sessionId: "ext-sess-webhook-ops-thread-009",
+                requestExternalMessageId: "ext-msg-demo-2",
+                replyTarget: {
+                    transport: "webhook",
+                    url: "https://example.com/reply",
+                    hasSecret: false,
+                    headerKeys: ["x-demo-token"],
+                },
+                payloadSummary: {
+                    ok: true,
+                    assistantTextPreview: "已完成处理",
+                    errorPreview: "",
+                },
+                attemptCount: 2,
+                replayCount: 1,
+                automaticReplayCount: 0,
+                latestError: "",
+                createdAt: "2026-06-04T11:20:00.000Z",
+                updatedAt: "2026-06-04T11:30:00.000Z",
+                deliveredAt: "2026-06-04T11:25:00.000Z",
+                resolvedAt: "2026-06-04T11:30:00.000Z",
+                nextAttemptAt: "",
+                lastAttemptAt: "2026-06-04T11:25:00.000Z",
+            },
+        ];
+        const visibleReplayEntries = includeResolved
+            ? replayEntries
+            : replayEntries.filter((entry) => !["resolved", "discarded"].includes(entry.status));
+        const counts = {
+            total: visibleReplayEntries.length,
+            pending: visibleReplayEntries.filter((entry) => entry.status === "pending").length,
+            delivered: visibleReplayEntries.filter((entry) => entry.status === "delivered").length,
+            awaitingOperator: visibleReplayEntries.filter((entry) => entry.status === "awaiting-operator").length,
+            resolved: visibleReplayEntries.filter((entry) => entry.status === "resolved").length,
+            discarded: visibleReplayEntries.filter((entry) => entry.status === "discarded").length,
+        };
+
+        return {
+            routes,
+            replayQueue: {
+                worker: {
+                    enabled: true,
+                    pollMs: 5000,
+                    delaysMs: [30000, 120000, 300000],
+                },
+                counts,
+                entries: visibleReplayEntries,
+            },
+            supportedReplyTransports: ["webhook", "lark-bot-webhook", "slack-webhook"],
+            replyRetryPolicy: {
+                maxAttempts: 3,
+                delaysMs: [1000, 3000],
+            },
+            backgroundReplay: {
+                enabled: true,
+                pollMs: 5000,
+                delaysMs: [30000, 120000, 300000],
+                mode: "in-process",
+                hasDedicatedReplayService: false,
+            },
+            runtimeNote: "当前 background replay worker 仍运行在 sidecar 进程内；更强的 delivery reliability 仍需要 dedicated replay service。",
+        };
+    };
 
     function clone<T>(value: T): T {
         return JSON.parse(JSON.stringify(value));
@@ -952,6 +1070,32 @@ export function ensureDevInjectedChannels() {
                 error: "浏览器控制未启用（mock）",
                 errorKind: "unavailable",
                 errorHint: "浏览器控制未启用（mock）",
+            })),
+            getIngressOperatorState: callbackify(async (includeResolved: boolean = false) =>
+                buildMockIngressOperatorState(includeResolved),
+            ),
+            replayIngressQueueEntry: callbackify(async (id: string) => {
+                const matchedEntry = buildMockIngressOperatorState(true).replayQueue.entries.find((entry) => entry.id === id);
+                return {
+                    ok: true,
+                    automatic: false,
+                    attemptCount: 1,
+                    error: "",
+                    entry: {
+                        ...(matchedEntry || {}),
+                        id,
+                        status: "delivered",
+                        latestError: "",
+                        deliveredAt: new Date().toISOString(),
+                        updatedAt: new Date().toISOString(),
+                    },
+                };
+            }),
+            resolveIngressQueueEntry: callbackify(async (id: string, resolution: string) => ({
+                id,
+                status: resolution || "resolved",
+                updatedAt: new Date().toISOString(),
+                resolvedAt: new Date().toISOString(),
             })),
             getMcpThirdPartyAgreement: callbackify(async () => mcpThirdPartyAgreementAccepted),
             setMcpThirdPartyAgreement: callbackify(async (accepted: boolean) => {

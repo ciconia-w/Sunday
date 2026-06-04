@@ -4,6 +4,7 @@ import { settingsHomeWorkspacePageDefinition } from "@/views/window/mainwindow/p
 import { modelSettingsWorkspacePageDefinition } from "@/views/window/mainwindow/page/settings/model/page";
 import { mcpServicesWorkspacePageDefinition } from "@/views/window/mainwindow/page/settings/mcpservices/page";
 import { skillsWorkspacePageDefinition } from "@/views/window/mainwindow/page/settings/skills/page";
+import { ingressOperatorWorkspacePageDefinition } from "@/views/window/mainwindow/page/settings/ingressoperator/page";
 import { registerMainWindowWorkspacePage } from "@/utils/mainwindow/workspacePages";
 import { digitalHumanWorkspacePageDefinition } from "@/views/window/mainwindow/page/digitalhuman/page";
 import { automationWorkspacePageDefinition } from "@/views/window/mainwindow/page/automation/page";
@@ -26,6 +27,7 @@ export const ensureBuiltInWorkspacePagesRegistered = () => {
     registerMainWindowWorkspacePage(browserPanelPageDefinition);
     registerMainWindowWorkspacePage(mcpServicesWorkspacePageDefinition);
     registerMainWindowWorkspacePage(skillsWorkspacePageDefinition);
+    registerMainWindowWorkspacePage(ingressOperatorWorkspacePageDefinition);
     registerMainWindowWorkspacePage(cliToolsWorkspacePageDefinition);
     registerMainWindowWorkspacePage(automationWorkspacePageDefinition);
     registerMainWindowWorkspacePage(digitalHumanWorkspacePageDefinition);

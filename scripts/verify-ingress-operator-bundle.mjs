@@ -1,0 +1,36 @@
+import { readFile } from "node:fs/promises";
+import { getBuiltBundlePath } from "./paths.mjs";
+
+const bundlePath = getBuiltBundlePath();
+const bundle = await readFile(bundlePath, "utf8");
+
+const markers = [
+    "data-ingress-operator-page",
+    "data-ingress-summary",
+    "data-ingress-route-row",
+    "data-ingress-replay-row",
+    "data-ingress-operator-runtime-note",
+    "IM Bridge",
+    "Delivery Policy",
+    "Reply Routes",
+    "Replay Queue",
+    "显示已处理",
+    "立即重试",
+    "标记已处理",
+    "忽略",
+    "Sidecar In-Process Worker",
+    "查看 reply route、replay queue 和当前 delivery policy。",
+];
+
+const present = Object.fromEntries(markers.map((marker) => [marker, bundle.includes(marker)]));
+const verdict = Object.values(present).every(Boolean)
+    ? "ingress-operator-bundle-confirmed"
+    : "ingress-operator-bundle-incomplete";
+
+console.log(JSON.stringify({
+    bundlePath,
+    present,
+    verdict,
+}, null, 2));
+
+process.exit(verdict === "ingress-operator-bundle-confirmed" ? 0 : 1);

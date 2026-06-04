@@ -140,6 +140,15 @@ Date: 2026-06-03
     - `get-replay-queue`
     - `replay-queue/replay`
     - `replay-queue/resolve`
+  - 扩展区 `IM Bridge` operator UI：
+    - reply route 列表
+    - replay queue 列表
+    - delivery policy / background replay 模式展示
+    - `立即重试 / 标记已处理 / 忽略` 的人工操作
+  - `serviceConfig` 已补齐 ingress operator surface：
+    - `getIngressOperatorState`
+    - `replayIngressQueueEntry`
+    - `resolveIngressQueueEntry`
 - `browser control` 已具备默认关闭、按需启用、按需注册工具的基础能力
 - Qt host 的 `serviceConfig` 已补齐浏览器 / CLI / MCP 基本 runtime bridge
 - 浏览器运行时能力画像已下沉到 sidecar：`stableTabSwitch`、`stableScreenshotCapture`、`runtimeLimitNotice`、`knownIssues` 由 `browser-control.mjs` 统一给出，前端不再直接写死 OpenCLI 版本判断
@@ -223,7 +232,7 @@ Date: 2026-06-03
 4. IM bridge refinement:
    - provider-specific ingress integration
    - 更多 provider-specific push/reply adapter
-   - 更强的 operator UI / delivery reliability
+   - dedicated replay service / 更强 delivery reliability
 5. 然后再进入更大的扩展平台方向：
    - extension install / market flows
    - architecture / performance cleanup

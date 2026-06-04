@@ -128,18 +128,19 @@ Current state:
 - persisted replay queue and sidecar operator API now exist for failed reply delivery
 - a second provider-specific adapter now exists via `slack-webhook`
 - pending reply deliveries can now be retried by an in-process background replay worker
+- extension workspace now also has a minimal `IM Bridge` operator UI backed by `serviceConfig`
 
 Current gaps:
 
 - platform-specific bridge logic still needs to be layered on top of the generic ingress contract
 - provider coverage is still narrow; broader platform coverage is still missing
-- retry policy is still minimal and in-process only; there is no front-end operator UI or dedicated replay service
+- retry policy is still minimal and in-process only; there is no dedicated replay service yet
 
 Recommended next step:
 
 - keep `/ingress/message` as the canonical sidecar ingress contract
 - keep generic webhook reply push as the first reusable transport adapter
-- keep replay / resolve / route inspection in sidecar operator APIs instead of frontend-specific code first
+- keep replay / resolve / route inspection authored in sidecar operator APIs, with the front-end UI staying as a thin operator surface
 - add more provider-specific push/reply adapters above it
 - use `taskObj` only if host-level delivery is required
 
