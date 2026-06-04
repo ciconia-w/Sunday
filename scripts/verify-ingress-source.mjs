@@ -61,9 +61,14 @@ const checks = {
         && externalIngressSource.includes("usesStandaloneBackgroundReplayService")
         && ingressReplayWorkerSource.includes("managedBySidecar")
         && devServerSource.includes("usesSidecarManagedBackgroundReplayService"),
+    ingressSupportsOperatorPauseResume: externalIngressSource.includes("backgroundReplayControlPath")
+        && externalIngressSource.includes("pauseBackgroundReplay")
+        && externalIngressSource.includes("resumeBackgroundReplay")
+        && externalIngressSource.includes("isBackgroundReplayPaused"),
     ingressReplayWorkerPollsOperatorApi: ingressReplayWorkerSource.includes("/ingress/get-replay-queue")
         && ingressReplayWorkerSource.includes("/ingress/replay-queue/replay")
-        && ingressReplayWorkerSource.includes("getBackgroundReplayServiceStatusPath"),
+        && ingressReplayWorkerSource.includes("getBackgroundReplayServiceStatusPath")
+        && ingressReplayWorkerSource.includes("replayQueue?.worker?.paused === true"),
     headlessRepliesPersistOnFinish: devServerSource.includes("persistHeadlessSessionRender")
         && devServerSource.includes("setConversationRender")
         && devServerSource.includes("saveConversation(current.conversationId)"),
@@ -73,7 +78,9 @@ const checks = {
     devServerExposesIngressOperatorApi: devServerSource.includes("/ingress/get-reply-routes")
         && devServerSource.includes("/ingress/get-replay-queue")
         && devServerSource.includes("/ingress/replay-queue/replay")
-        && devServerSource.includes("/ingress/replay-queue/resolve"),
+        && devServerSource.includes("/ingress/replay-queue/resolve")
+        && devServerSource.includes("/ingress/background-replay/pause")
+        && devServerSource.includes("/ingress/background-replay/resume"),
     devServerSupervisesReplayService: devServerSource.includes("ingress-replay-worker.mjs")
         && devServerSource.includes("setBackgroundReplayServiceSupervisorStateProvider")
         && devServerSource.includes("startIngressReplayServiceWorker"),
@@ -99,7 +106,9 @@ const checks = {
     docExplainsReplayOperatorSurface: ingressDocSource.includes("external-ingress-replay-queue.json")
         && ingressDocSource.includes("/ingress/get-replay-queue")
         && ingressDocSource.includes("/ingress/replay-queue/replay")
-        && ingressDocSource.includes("/ingress/replay-queue/resolve"),
+        && ingressDocSource.includes("/ingress/replay-queue/resolve")
+        && ingressDocSource.includes("/ingress/background-replay/pause")
+        && ingressDocSource.includes("/ingress/background-replay/resume"),
 };
 
 const verdict = Object.values(checks).every(Boolean)

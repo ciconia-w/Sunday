@@ -139,19 +139,25 @@ Date: 2026-06-03
   - `in-process` / `service` / `standalone-service` 三种 background replay 模式
   - `fixed` / `exponential` 两类 delivery policy
   - dedicated replay service heartbeat/status 落盘：`external-ingress-replay-service-status.json`
+  - automatic replay pause/resume 状态落盘：`external-ingress-operator-control.json`
   - sidecar operator API：
     - `get-reply-routes`
     - `get-replay-queue`
     - `replay-queue/replay`
     - `replay-queue/resolve`
+    - `background-replay/pause`
+    - `background-replay/resume`
   - 扩展区 `IM Bridge` operator UI：
     - reply route 列表
     - replay queue 列表
     - delivery policy / background replay 模式展示
+    - automatic replay pause / resume 治理
     - `立即重试 / 标记已处理 / 忽略` 的人工操作
   - `serviceConfig` 已补齐 ingress operator surface：
     - `getIngressOperatorState`
     - `replayIngressQueueEntry`
+    - `pauseIngressBackgroundReplay`
+    - `resumeIngressBackgroundReplay`
     - `resolveIngressQueueEntry`
 - `browser control` 已具备默认关闭、按需启用、按需注册工具的基础能力
 - Qt host 的 `serviceConfig` 已补齐浏览器 / CLI / MCP 基本 runtime bridge

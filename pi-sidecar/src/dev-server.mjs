@@ -899,6 +899,10 @@ const server = createServer(async (_req, res) => {
                     });
                 } else if (_req.url === "/service-config/replay-ingress-queue-entry") {
                     result = await externalIngress.replayQueuedReply(body.id ?? "");
+                } else if (_req.url === "/service-config/pause-ingress-background-replay") {
+                    result = await externalIngress.pauseBackgroundReplay(body.reason ?? "");
+                } else if (_req.url === "/service-config/resume-ingress-background-replay") {
+                    result = await externalIngress.resumeBackgroundReplay();
                 } else if (_req.url === "/service-config/resolve-ingress-queue-entry") {
                     result = await externalIngress.resolveReplayQueueEntry(body.id ?? "", body.resolution ?? "");
                 } else if (_req.url === "/service-config/get-mcp-third-party-agreement") {
@@ -953,6 +957,10 @@ const server = createServer(async (_req, res) => {
                     result = await externalIngress.replayQueuedReply(body.id ?? "", {
                         automatic: body.automatic === true,
                     });
+                } else if (_req.url === "/ingress/background-replay/pause") {
+                    result = await externalIngress.pauseBackgroundReplay(body.reason ?? "");
+                } else if (_req.url === "/ingress/background-replay/resume") {
+                    result = await externalIngress.resumeBackgroundReplay();
                 } else if (_req.url === "/ingress/replay-queue/resolve") {
                     result = await externalIngress.resolveReplayQueueEntry(body.id ?? "", body.resolution ?? "");
                 } else {

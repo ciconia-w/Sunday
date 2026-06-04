@@ -198,6 +198,10 @@ export function ensureDevInjectedChannels() {
             toolCount: 14,
         },
     ];
+    let mockIngressBackgroundReplayPaused = false;
+    let mockIngressBackgroundReplayPauseReason = "";
+    let mockIngressBackgroundReplayPausedAt = "";
+    let mockIngressBackgroundReplayUpdatedAt = "";
     const buildMockIngressOperatorState = (includeResolved = false) => {
         const routes = [
             {
@@ -297,6 +301,9 @@ export function ensureDevInjectedChannels() {
                     enabled: true,
                     pollMs: 5000,
                     delaysMs: [30000, 120000, 300000],
+                    paused: mockIngressBackgroundReplayPaused,
+                    pauseReason: mockIngressBackgroundReplayPauseReason,
+                    pausedAt: mockIngressBackgroundReplayPausedAt,
                 },
                 counts,
                 entries: visibleReplayEntries,
@@ -332,8 +339,16 @@ export function ensureDevInjectedChannels() {
                     manager: "none",
                     managedBySidecar: false,
                 },
+                control: {
+                    paused: mockIngressBackgroundReplayPaused,
+                    pauseReason: mockIngressBackgroundReplayPauseReason,
+                    pausedAt: mockIngressBackgroundReplayPausedAt,
+                    updatedAt: mockIngressBackgroundReplayUpdatedAt,
+                },
             },
-            runtimeNote: "当前 background replay worker 仍运行在 sidecar 进程内；更强的 delivery reliability 仍需要 dedicated replay service。",
+            runtimeNote: mockIngressBackgroundReplayPaused
+                ? "当前 automatic replay 已被 operator 暂停；手动重试和 resolve 仍可继续使用。"
+                : "当前 background replay worker 仍运行在 sidecar 进程内；更强的 delivery reliability 仍需要 dedicated replay service。",
         };
     };
 
@@ -1109,6 +1124,31 @@ export function ensureDevInjectedChannels() {
                         deliveredAt: new Date().toISOString(),
                         updatedAt: new Date().toISOString(),
                     },
+                };
+            }),
+            pauseIngressBackgroundReplay: callbackify(async (reason: string) => {
+                const now = new Date().toISOString();
+                mockIngressBackgroundReplayPaused = true;
+                mockIngressBackgroundReplayPauseReason = typeof reason === "string" ? reason.trim() : "";
+                mockIngressBackgroundReplayPausedAt = mockIngressBackgroundReplayPausedAt || now;
+                mockIngressBackgroundReplayUpdatedAt = now;
+                return {
+                    paused: true,
+                    pauseReason: mockIngressBackgroundReplayPauseReason,
+                    pausedAt: mockIngressBackgroundReplayPausedAt,
+                    updatedAt: mockIngressBackgroundReplayUpdatedAt,
+                };
+            }),
+            resumeIngressBackgroundReplay: callbackify(async () => {
+                mockIngressBackgroundReplayPaused = false;
+                mockIngressBackgroundReplayPauseReason = "";
+                mockIngressBackgroundReplayPausedAt = "";
+                mockIngressBackgroundReplayUpdatedAt = new Date().toISOString();
+                return {
+                    paused: false,
+                    pauseReason: "",
+                    pausedAt: "",
+                    updatedAt: mockIngressBackgroundReplayUpdatedAt,
                 };
             }),
             resolveIngressQueueEntry: callbackify(async (id: string, resolution: string) => ({

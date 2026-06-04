@@ -254,6 +254,15 @@ function summarizeReplayQueueEntry(entry) {
     };
 }
 
+function createDefaultBackgroundReplayControl() {
+    return {
+        paused: false,
+        pauseReason: "",
+        pausedAt: "",
+        updatedAt: "",
+    };
+}
+
 function formatPlainTextReply(payload) {
     if (payload?.ok === true) {
         return typeof payload?.assistantText === "string" && payload.assistantText.trim()
@@ -285,6 +294,7 @@ export class ExternalIngress {
         this.routeStorePath = resolve(options.runtimeDir, "external-ingress-routes.json");
         this.deadLetterPath = resolve(options.runtimeDir, "external-ingress-dead-letters.json");
         this.replayQueuePath = resolve(options.runtimeDir, "external-ingress-replay-queue.json");
+        this.backgroundReplayControlPath = resolve(options.runtimeDir, "external-ingress-operator-control.json");
         this.backgroundReplayServiceStatusPath = getBackgroundReplayServiceStatusPath(options.runtimeDir);
         this.replyRetryDelaysMs = normalizeRetryDelays(
             process.env.PERSONAL_AGENT_INGRESS_REPLY_RETRY_DELAYS_MS,
@@ -302,6 +312,7 @@ export class ExternalIngress {
         );
         this.routeTargets = new Map();
         this.replayQueue = new Map();
+        this.backgroundReplayControl = createDefaultBackgroundReplayControl();
         this.sessionQueues = new Map();
         this.activeSessionJobs = new Map();
         this.processingReplayEntryIds = new Set();
@@ -317,7 +328,11 @@ export class ExternalIngress {
             return this.readyPromise;
         }
 
-        this.readyPromise = Promise.all([this.loadRouteTargets(), this.loadReplayQueue()]).then(() => undefined);
+        this.readyPromise = Promise.all([
+            this.loadRouteTargets(),
+            this.loadReplayQueue(),
+            this.loadBackgroundReplayControl(),
+        ]).then(() => undefined);
         return this.readyPromise;
     }
 
@@ -361,12 +376,35 @@ export class ExternalIngress {
         }
     }
 
+    async loadBackgroundReplayControl() {
+        try {
+            const raw = await readFile(this.backgroundReplayControlPath, "utf8");
+            const parsed = JSON.parse(raw);
+            this.backgroundReplayControl = {
+                paused: parsed?.paused === true,
+                pauseReason: typeof parsed?.pauseReason === "string" ? parsed.pauseReason : "",
+                pausedAt: typeof parsed?.pausedAt === "string" ? parsed.pausedAt : "",
+                updatedAt: typeof parsed?.updatedAt === "string" ? parsed.updatedAt : "",
+            };
+        } catch {
+            this.backgroundReplayControl = createDefaultBackgroundReplayControl();
+        }
+    }
+
     async saveReplayQueue() {
         await mkdir(dirname(this.replayQueuePath), { recursive: true });
         const entries = [...this.replayQueue.values()].sort((left, right) =>
             String(left.createdAt ?? "").localeCompare(String(right.createdAt ?? "")),
         );
         await writeFile(this.replayQueuePath, JSON.stringify({ entries }, null, 2));
+    }
+
+    async saveBackgroundReplayControl() {
+        await mkdir(dirname(this.backgroundReplayControlPath), { recursive: true });
+        await writeFile(
+            this.backgroundReplayControlPath,
+            JSON.stringify(this.backgroundReplayControl, null, 2),
+        );
     }
 
     startBackgroundReplayLoop() {
@@ -391,6 +429,67 @@ export class ExternalIngress {
 
     usesSidecarManagedBackgroundReplayService() {
         return this.backgroundReplayEnabled && this.backgroundReplayMode === "service";
+    }
+
+    isBackgroundReplayPaused() {
+        return this.backgroundReplayControl?.paused === true;
+    }
+
+    getBackgroundReplayControlState() {
+        return {
+            paused: this.backgroundReplayControl?.paused === true,
+            pauseReason: typeof this.backgroundReplayControl?.pauseReason === "string"
+                ? this.backgroundReplayControl.pauseReason
+                : "",
+            pausedAt: typeof this.backgroundReplayControl?.pausedAt === "string"
+                ? this.backgroundReplayControl.pausedAt
+                : "",
+            updatedAt: typeof this.backgroundReplayControl?.updatedAt === "string"
+                ? this.backgroundReplayControl.updatedAt
+                : "",
+        };
+    }
+
+    async pauseBackgroundReplay(reason = "") {
+        await this.ensureReady();
+        if (!this.backgroundReplayEnabled) {
+            throw new Error("Background replay is disabled");
+        }
+
+        const now = new Date().toISOString();
+        const normalizedReason = typeof reason === "string" ? reason.trim() : "";
+        const previousState = this.getBackgroundReplayControlState();
+        this.backgroundReplayControl = {
+            paused: true,
+            pauseReason: normalizedReason,
+            pausedAt: previousState.pausedAt || now,
+            updatedAt: now,
+        };
+        await this.saveBackgroundReplayControl();
+        return this.getBackgroundReplayControlState();
+    }
+
+    async resumeBackgroundReplay() {
+        await this.ensureReady();
+        if (!this.backgroundReplayEnabled) {
+            throw new Error("Background replay is disabled");
+        }
+
+        this.backgroundReplayControl = {
+            paused: false,
+            pauseReason: "",
+            pausedAt: "",
+            updatedAt: new Date().toISOString(),
+        };
+        await this.saveBackgroundReplayControl();
+
+        if (!this.usesDedicatedBackgroundReplayService()) {
+            this.runDueBackgroundReplays().catch((error) => {
+                console.error("[external-ingress] immediate background replay resume failed:", error);
+            });
+        }
+
+        return this.getBackgroundReplayControlState();
     }
 
     usesStandaloneBackgroundReplayService() {
@@ -512,6 +611,9 @@ export class ExternalIngress {
                 delaysMs: [...this.backgroundReplayDelaysMs],
                 strategy: this.backgroundReplayPolicy.strategy,
                 maxAutomaticAttempts: this.backgroundReplayPolicy.maxAutomaticAttempts,
+                paused: this.isBackgroundReplayPaused(),
+                pauseReason: this.getBackgroundReplayControlState().pauseReason,
+                pausedAt: this.getBackgroundReplayControlState().pausedAt,
             },
             counts,
             entries,
@@ -613,9 +715,12 @@ export class ExternalIngress {
         const routes = await this.listReplyRoutes();
         const replayQueue = await this.getReplayQueue(options);
         const backgroundReplayServiceStatus = await this.getBackgroundReplayServiceStatus();
+        const backgroundReplayControl = this.getBackgroundReplayControlState();
 
         let runtimeNote = "background replay 已关闭。";
-        if (this.backgroundReplayEnabled && this.backgroundReplayMode === "service") {
+        if (this.backgroundReplayEnabled && backgroundReplayControl.paused) {
+            runtimeNote = "当前 automatic replay 已被 operator 暂停；手动重试和 resolve 仍可继续使用。";
+        } else if (this.backgroundReplayEnabled && this.backgroundReplayMode === "service") {
             runtimeNote = backgroundReplayServiceStatus.running
                 ? "当前 background replay 由 sidecar 管理的 dedicated replay service 驱动；sidecar 继续保有 route / replay queue 与 operator API。"
                 : "当前 background replay 已切到 sidecar-managed dedicated replay service 模式，但 worker 暂未进入稳定运行态。";
@@ -650,6 +755,7 @@ export class ExternalIngress {
                     multiplier: this.backgroundReplayPolicy.multiplier,
                 },
                 serviceStatus: backgroundReplayServiceStatus,
+                control: backgroundReplayControl,
             },
             runtimeNote,
         };
@@ -1166,6 +1272,16 @@ export class ExternalIngress {
 
         try {
             const automatic = options.automatic === true;
+            if (automatic && this.isBackgroundReplayPaused()) {
+                return {
+                    ok: false,
+                    automatic: true,
+                    skipped: true,
+                    reason: "paused",
+                    error: "Background replay is paused",
+                    entry: summarizeReplayQueueEntry(entry),
+                };
+            }
             const delivery = await this.executeReplyDelivery(entry.replyTarget ?? {}, entry.payload ?? {});
             const now = new Date().toISOString();
             entry.attemptCount = normalizeNonNegativeInteger(entry.attemptCount, 0) + delivery.attemptCount;
@@ -1252,6 +1368,9 @@ export class ExternalIngress {
         this.backgroundReplayLoopRunning = true;
         try {
             await this.ensureReady();
+            if (this.isBackgroundReplayPaused()) {
+                return;
+            }
             const now = Date.now();
             const dueEntries = [...this.replayQueue.values()]
                 .filter((entry) => String(entry.status ?? "") === "pending")

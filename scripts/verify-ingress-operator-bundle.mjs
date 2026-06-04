@@ -18,11 +18,16 @@ const markers = [
     "立即重试",
     "标记已处理",
     "忽略",
+    "暂停自动重放",
+    "恢复自动重放",
+    "自动重放已暂停",
     "Sidecar In-Process Worker",
     "Standalone Replay Service",
     "Discord",
     "DingTalk",
     "Worker 状态",
+    "治理状态",
+    "暂停时间",
     "退避策略",
     "Fixed Delays",
     "Exponential Backoff",
@@ -31,6 +36,10 @@ const markers = [
     "data-ingress-operator-service-runtime",
     "data-ingress-operator-service-heartbeat",
     "data-ingress-operator-delivery-strategy",
+    "data-ingress-operator-control-state",
+    "data-ingress-operator-pause-action",
+    "data-ingress-operator-resume-action",
+    "data-ingress-operator-paused-at",
 ];
 
 const present = Object.fromEntries(markers.map((marker) => [marker, bundle.includes(marker)]));

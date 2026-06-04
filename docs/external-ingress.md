@@ -243,6 +243,9 @@ reply queue 现在已经有最小 background replay worker。
 - 到达 `nextAttemptAt` 后自动重放
 - 自动重放成功后会把 entry 标成 `delivered`
 - 自动重放超出当前 delay policy 后，会把 entry 标成 `awaiting-operator`
+- operator 现在可以显式暂停 / 恢复 automatic replay
+- pause 状态会保存在：
+  - `external-ingress-operator-control.json`
 
 当前相关环境变量：
 
@@ -294,7 +297,7 @@ background replay 当前支持两类 delivery policy：
 
 当前这个 dedicated replay service 仍然是最小实现：
 
-- 没有 UI 级 pause / resume / replay history
+- replay history 仍未单独产品化
 - queue / route 的真实所有权仍保留在 sidecar，不是完全自持久化的独立服务
 
 ## Operator Surface
@@ -305,8 +308,24 @@ background replay 当前支持两类 delivery policy：
 - `POST /ingress/get-replay-queue`
 - `POST /ingress/replay-queue/replay`
 - `POST /ingress/replay-queue/resolve`
+- `POST /ingress/background-replay/pause`
+- `POST /ingress/background-replay/resume`
 
 这些 endpoint 当前都是 sidecar operator surface，不经过前端 UI。
+
+对应的扩展区 `IM Bridge` operator UI 和 `serviceConfig` surface，现在已补齐：
+
+- `getIngressOperatorState`
+- `replayIngressQueueEntry`
+- `resolveIngressQueueEntry`
+- `pauseIngressBackgroundReplay`
+- `resumeIngressBackgroundReplay`
+
+当前 pause / resume 约束：
+
+- 只暂停 automatic replay，不影响 operator 手动 `replay / resolve`
+- pause 状态跨 sidecar 重启保留
+- dedicated / standalone replay worker 都会尊重这个 paused state
 
 另外，Sunday 前端扩展区现在已经补了一层最小 operator UI，通过 `serviceConfig` 通道读取这些 sidecar 状态并执行人工动作：
 
