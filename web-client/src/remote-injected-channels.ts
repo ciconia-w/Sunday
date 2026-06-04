@@ -406,6 +406,109 @@ export async function createRemoteInjectedChannels(baseUrl = "") {
             getRuntimeStatus: callbackify(async () =>
                 postServiceConfig("/service-config/get-runtime-status", {}, state.runtime ?? {}),
             ),
+            getCliToolsState: callbackify(async () =>
+                postServiceConfig("/service-config/get-cli-tools-state", {}, []),
+            ),
+            getBrowserControlState: callbackify(async () =>
+                postServiceConfig("/service-config/get-browser-control-state", {}, {
+                    enabled: false,
+                    daemonRunning: false,
+                    extensionConnected: false,
+                    daemonLabel: "未运行",
+                    extensionLabel: "未连接",
+                    version: "",
+                    statusSummary: "浏览器控制已关闭",
+                    extensionPath: "",
+                    outputDir: "",
+                    sessionName: "sunday",
+                    repoRoot: "",
+                    stableTabSwitch: true,
+                    stableScreenshotCapture: true,
+                    runtimeLimitNotice: "",
+                    knownIssues: [],
+                    tabSwitchCapabilityDescription: "当前运行时支持稳定的标签页切换。",
+                    screenshotCapabilityDescription: "当前运行时支持稳定的整页截图。",
+                    screenshotGuidance: "建议先刷新状态并确认插件连接正常；如果仍失败，优先使用页面提取继续完成当前任务。",
+                    screenshotActionLabel: "整页截图",
+                }),
+            ),
+            setBrowserControlEnabled: callbackify(async (enabled: boolean) =>
+                postServiceConfig("/service-config/set-browser-control-enabled", { enabled }, { enabled }),
+            ),
+            getBrowserPanelState: callbackify(async () =>
+                postServiceConfig("/service-config/get-browser-panel-state", {}, {
+                    enabled: false,
+                    daemonRunning: false,
+                    extensionConnected: false,
+                    daemonLabel: "未运行",
+                    extensionLabel: "未连接",
+                    version: "",
+                    statusSummary: "浏览器控制已关闭",
+                    extensionPath: "",
+                    outputDir: "",
+                    sessionName: "sunday",
+                    repoRoot: "",
+                    stableTabSwitch: true,
+                    stableScreenshotCapture: true,
+                    runtimeLimitNotice: "",
+                    knownIssues: [],
+                    tabSwitchCapabilityDescription: "当前运行时支持稳定的标签页切换。",
+                    screenshotCapabilityDescription: "当前运行时支持稳定的整页截图。",
+                    screenshotGuidance: "建议先刷新状态并确认插件连接正常；如果仍失败，优先使用页面提取继续完成当前任务。",
+                    screenshotActionLabel: "整页截图",
+                    url: "",
+                    title: "",
+                    interactive: 0,
+                    tabs: [],
+                }),
+            ),
+            startBrowserSessionIfEnabled: callbackify(async () =>
+                postServiceConfig("/service-config/start-browser-session-if-enabled", {}, {
+                    enabled: false,
+                    started: false,
+                    reason: "disabled",
+                }),
+            ),
+            initBrowserSession: callbackify(async () =>
+                postServiceConfig("/service-config/init-browser-session", {}, null),
+            ),
+            browserOpenUrl: callbackify(async (url: string) =>
+                postServiceConfig("/service-config/browser-open-url", { url }, {
+                    ok: false,
+                    message: "",
+                    error: "service-config unavailable",
+                }),
+            ),
+            browserNewTab: callbackify(async (url: string) =>
+                postServiceConfig("/service-config/browser-new-tab", { url }, {
+                    ok: false,
+                    message: "",
+                    error: "service-config unavailable",
+                }),
+            ),
+            browserSelectTab: callbackify(async (pageId: string) =>
+                postServiceConfig("/service-config/browser-select-tab", { pageId }, {
+                    ok: false,
+                    message: "",
+                    error: "service-config unavailable",
+                }),
+            ),
+            browserExtractPage: callbackify(async () =>
+                postServiceConfig("/service-config/browser-extract-page", {}, {
+                    ok: false,
+                    content: "",
+                    error: "service-config unavailable",
+                }),
+            ),
+            browserCaptureScreenshot: callbackify(async (outputPath = "") =>
+                postServiceConfig("/service-config/browser-capture-screenshot", { outputPath }, {
+                    ok: false,
+                    screenshotPath: "",
+                    error: "service-config unavailable",
+                    errorKind: "unavailable",
+                    errorHint: "service-config unavailable",
+                }),
+            ),
             getMcpThirdPartyAgreement: callbackify(async () =>
                 postServiceConfig("/service-config/get-mcp-third-party-agreement", {}, false),
             ),
@@ -414,6 +517,15 @@ export async function createRemoteInjectedChannels(baseUrl = "") {
             ),
             getMcpServices: callbackify(async () =>
                 postServiceConfig("/service-config/get-mcp-services", {}, { success: true, services: [] }),
+            ),
+            setMcpServiceEnabled: callbackify(async (serviceId: string, enabled: boolean) =>
+                postServiceConfig("/service-config/set-mcp-service-enabled", { serviceId, enabled }, null),
+            ),
+            saveMcpService: callbackify(async (jsonConfig: string, description: string, serviceId = "") =>
+                postServiceConfig("/service-config/save-mcp-service", { jsonConfig, description, serviceId }, null),
+            ),
+            deleteMcpService: callbackify(async (serviceId: string) =>
+                postServiceConfig("/service-config/delete-mcp-service", { serviceId }, null),
             ),
         },
     };

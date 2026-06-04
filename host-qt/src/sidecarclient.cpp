@@ -79,8 +79,11 @@ QJsonValue SidecarClient::postJsonValueSync(const QString &path, const QVariantM
     loop.exec();
 
     if (reply->error() != QNetworkReply::NoError) {
+        const QByteArray raw = reply->readAll();
+        const QJsonObject root = QJsonDocument::fromJson(raw).object();
+        const QString detailedError = root.value(QStringLiteral("error")).toString();
         if (errorMessage)
-            *errorMessage = reply->errorString();
+            *errorMessage = detailedError.isEmpty() ? reply->errorString() : detailedError;
         delete reply;
         return QJsonValue();
     }
@@ -88,6 +91,11 @@ QJsonValue SidecarClient::postJsonValueSync(const QString &path, const QVariantM
     const QByteArray raw = reply->readAll();
     delete reply;
     const QJsonObject root = QJsonDocument::fromJson(raw).object();
+    if (root.contains(QStringLiteral("ok")) && !root.value(QStringLiteral("ok")).toBool(true)) {
+        if (errorMessage)
+            *errorMessage = root.value(QStringLiteral("error")).toString();
+        return QJsonValue();
+    }
     return root.value(QStringLiteral("result"));
 }
 

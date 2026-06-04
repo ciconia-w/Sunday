@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 import { createAgentSession, SessionManager } from "@earendil-works/pi-coding-agent";
 import { UosSessionEvent } from "./channel-types.mjs";
 import { SimpleSignal } from "./signal.mjs";
+import { browserTools, isBrowserControlEnabled } from "./browser-tools.mjs";
+import { getBrowserScreenshotErrorDetails } from "./browser-control.mjs";
 
 export class PiSessionBridge {
     constructor(options) {
@@ -84,6 +86,12 @@ export class PiSessionBridge {
         const targetModel = this.options.getModelById
             ? this.options.getModelById(targetModelId)
             : this.options.model;
+        const browserEnabled = isBrowserControlEnabled();
+        const enabledBrowserToolNames = browserEnabled ? browserTools.map((tool) => tool.name) : [];
+        const baseTools = this.options.tools ?? ["read", "bash", "grep", "find", "ls"];
+        const tools = browserEnabled
+            ? [...baseTools, ...enabledBrowserToolNames.filter((toolName) => !baseTools.includes(toolName))]
+            : baseTools;
 
         const created = await createAgentSession({
             cwd: this.options.cwd,
@@ -91,7 +99,28 @@ export class PiSessionBridge {
             model: targetModel,
             authStorage: this.options.authStorage,
             modelRegistry: this.options.modelRegistry,
-            tools: this.options.tools ?? ["read", "bash", "grep", "find", "ls"],
+            tools,
+            customTools: browserEnabled ? browserTools : [],
+            afterToolCall: async ({ toolCall, result, isError }) => {
+                if (!isError || toolCall.name !== "browser_screenshot") {
+                    return undefined;
+                }
+
+                const normalizedDetails =
+                    result && typeof result === "object" && result.details && typeof result.details === "object"
+                        ? { ...result.details }
+                        : {};
+                const screenshotFailure = getBrowserScreenshotErrorDetails(this.collectTextFromToolValue(result));
+
+                return {
+                    details: {
+                        ...normalizedDetails,
+                        errorKind: screenshotFailure.errorKind,
+                        errorHint: screenshotFailure.errorHint,
+                    },
+                    isError: true,
+                };
+            },
             sessionManager: SessionManager.inMemory(this.options.cwd),
         });
 

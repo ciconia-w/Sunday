@@ -91,6 +91,8 @@ async function run() {
             hostLog.includes("[host-qt web] loadFinished true") &&
             builtBundle.includes("data-welcome-recent-work") &&
             builtBundle.includes("data-welcome-open-conversation") &&
+            builtBundle.includes("data-welcome-starter-card") &&
+            builtBundle.includes("快速起手") &&
             !builtBundle.includes("runtime-status-badge") &&
             !builtBundle.includes("chat-view__session-model-strip")
                 ? "host-qt-welcome-confirmed"
@@ -104,6 +106,8 @@ async function run() {
                     hostLog,
                     hasRecentWorkPanel: builtBundle.includes("data-welcome-recent-work"),
                     hasRecentWorkAction: builtBundle.includes("data-welcome-open-conversation"),
+                    hasStarterCards: builtBundle.includes("data-welcome-starter-card"),
+                    hasStarterHeader: builtBundle.includes("快速起手"),
                     removedRuntimeHud: !builtBundle.includes("runtime-status-badge"),
                     removedSessionModelStrip: !builtBundle.includes("chat-view__session-model-strip"),
                 },

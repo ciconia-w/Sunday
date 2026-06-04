@@ -1,6 +1,6 @@
 # MVP Status
 
-Date: 2026-05-27
+Date: 2026-06-03
 
 ## Product Positioning
 
@@ -33,17 +33,17 @@ Date: 2026-05-27
 
 - Qt host 可加载静态前端
 - sidecar 可跑真实 provider
-- 默认通用助手已统一对外命名为 `PI Agent`
+- 默认通用助手当前已统一对外显示为 `Sunday`
 
 ### Chat / tool call
 
 - 真实 provider 对话链路已通
 - Qt host 下 live chat 已验证
 - tool call / `bash` 展示链路已通
-- 默认欢迎页已收为更聚焦的 PI Agent 工作台入口：
+- 默认欢迎页已收为更聚焦的 Sunday 工作台入口：
   - 最近会话继续入口
   - starter task 预填充
-  - runtime / tool readiness 状态面板
+  - 不再自动弹出 startup onboarding
 - 扩展区已升级为统一工作区：
   - 左侧主导航只保留一个 `扩展` 入口
   - 页内通过 `技能 / CLI / MCP` 三个标签切换
@@ -66,7 +66,7 @@ Date: 2026-05-27
 - `Settings` 已升级为首页控制台 `Settings Home`
 - `Settings Home` 当前已前置一批高频控制：
   - runtime diagnostics
-  - quick runtime config
+  - model settings entry
   - 统一扩展中心入口
 - 关键 workspace 页面当前都支持直接作为启动目标页：
   - `extensions`
@@ -90,11 +90,56 @@ Date: 2026-05-27
   - 文件卡片出现
   - 解析完成
   - 删除文件卡片
+- 附件区当前已补最小产品化状态：
+  - ready / parsing / failed guidance
+  - `Clear all` 批量动作
+  - failed file retry / remove 动作与反馈
+  - message-level attachment context
 
 ### Early extension surfaces
 
 - `skillsMgr` 最小 sidecar-backed inventory 已落地
 - `MCP registry` 最小 sidecar-backed registry 已落地
+- `MCP services` 已具备自定义服务增删改开关的真实 sidecar CRUD 基线
+- `CLI tools` 已具备 sidecar 统一状态模型
+- `browser control` 已具备默认关闭、按需启用、按需注册工具的基础能力
+- Qt host 的 `serviceConfig` 已补齐浏览器 / CLI / MCP 基本 runtime bridge
+- 浏览器运行时能力画像已下沉到 sidecar：`stableTabSwitch`、`stableScreenshotCapture`、`runtimeLimitNotice`、`knownIssues` 由 `browser-control.mjs` 统一给出，前端不再直接写死 OpenCLI 版本判断
+- 截图受限时的按钮标签、能力描述和后续引导现在也由 sidecar runtime profile 统一给出，浏览器设置页和浏览器面板不再各自拼接一套截图限制文案
+- 浏览器设置页现在明确保留 guided install 路线：未连接时直接暴露扩展目录、复制路径、打开扩展页、刷新状态和安装步骤清单，不再只靠 toast
+- 浏览器设置页现在有独立的 bundle verifier，可在不启动 Qt host 的情况下检查 install actions 和 runtime notice 是否进入产物
+- sidecar 运行时画像现在也有独立的 source verifier，可在不启动 Qt host 的情况下检查能力字段和已知问题逻辑是否仍在 `browser-control.mjs`
+- browser action bridge 现在也有独立的 source verifier，可在不启动 Qt host 的情况下检查 `dev-server -> serviceconfigchannel` 的结构化成功/失败结果仍然保留
+- browser service-config 现在也有独立的 API verifier，可在不启动 Qt host 的情况下直接验证 `/service-config/browser-extract-page`、`/service-config/browser-capture-screenshot` 的结构化返回，并单次探测真实 `http/https` 页面下的 `reopen-url` fallback
+- Sunday 通过 OpenCLI 执行 `browser open / tab new` 时，当前默认使用 `--window background`，避免验证和运行时动作抢占当前浏览器前台
+- `verify:browser-service-config-api` 当前默认已经切到非打扰模式：不会主动打开真实测试页；如需验证真实 `http/https` fallback，可显式运行 `npm run verify:browser-service-config-api:real`
+- tab select fallback 现在也有独立的逻辑 verifier，可在不打开真实网页的情况下验证 `http/https` 页面会走 reopen-url，而 `about:blank` 这类 scheme 不会误触 fallback
+- 聊天里的 browser tool use 现在也有独立的 bundle verifier，可在不启动 Qt host 的情况下检查失败摘要和截图识别逻辑是否进入产物
+- 浏览器面板现在也有独立的 bundle verifier，可在不启动 Qt host 的情况下检查 runtime notice、截图失败引导和结果区动作是否进入产物
+- 浏览器非打扰默认策略现在也有独立的 source verifier，可检查后台窗口模式和真实 probe 的显式开关仍然保留
+- 浏览器设置页和浏览器面板现在都会直接展示运行时能力状态卡，显式标出“多标签切换 / 整页截图”当前是稳定还是受限
+- `browser panel` 已具备真实交互验证链路：
+  - init session
+  - open example
+  - new tab
+  - fallback reopen-url
+  - extract page
+  - capture screenshot action
+- 浏览器面板在未连接时现在会直接提供守护进程重启、扩展页打开、插件路径复制、设置页跳转和刷新状态动作；浏览器动作在未就绪前会禁用，避免无效点击
+- 截图和提取失败现在会在浏览器面板里显式展示，不再静默吞掉；截图失败时会提示当前 OpenCLI 运行时限制
+- 浏览器面板结果区现在提供 `打开输出目录`、`复制截图路径`、`复制提取内容` 等后续动作，截图请求也会显式传空输出路径，避免 Qt bridge 的隐式参数歧义
+- `dev-server` 和 Qt `serviceConfigChannel` 现在都支持结构化 browser action 结果，截图失败不再只能依赖 HTTP 400 运输错误来传递详情
+- sidecar 的 OpenCLI 错误输出现在会清洗 `UNDICI-EHPA` 这类运行时 warning，截图失败在 API 层已经能稳定拿到更干净的错误文本
+- 截图失败现在除了原始错误文本，还会返回结构化的 `errorKind / errorHint`；当前 `OpenCLI v1.8.0` 的已知失败会被归类成 `runtime-typeerror`，浏览器面板可据此稳定显示降级提示
+- 当运行时标记 `stableTabSwitch=false` 时，`selectBrowserTab` 现在会优先尝试对 `http/https` 标签页做 reopen-url fallback；对 `about:blank` 这类非网页 scheme 则保留原始 select 路径
+- 聊天里的 `browser_*` tool use 现在也会区分失败摘要，`browser_screenshot` 成功时可直接识别并预览截图文件，不再只在面板里可见
+- 聊天里的 `browser_screenshot` 失败现在也会通过 tool-use bridge 吃到 `errorHint`，摘要和展开详情不再只剩技术错误文本
+- `host-qt-browser-panel` verifier 已补冷启动重试，不再把偶发 `loadFinished true` 空跑当成通过或失败依据
+
+当前仍未收口的浏览器运行时缺口：
+
+- 当前 OpenCLI 环境下真正的多 tab 切换还不能当成可靠能力；但 `reopen-url` fallback 已通过 sidecar-only verifier 在真实 `http/https` 页面下确认，不再只是纯逻辑推断
+- 当前 OpenCLI `browser ... screenshot` 在 `v1.8.0` 下会抛运行时错误，Sunday 已能触发动作，但截图文件不能稳定生成
 
 ## Deliberately Out of MVP
 
@@ -112,18 +157,30 @@ Date: 2026-05-27
 - 目前仅有**最小 registry / inventory 能力**，用于承接后续扩展平台工作
 - 写作工作区等能力仍保留在仓库中，但当前只作为兼容/扩展能力，不继续作为默认产品面推进
 
-## Remaining Gaps Before MVP Feels “Ready”
+## MVP Closure Notes
 
-- 默认启动体验还可以继续收口
-- 仍有少量 Qt 控制台噪声
-- 文件链路已具备最短闭环，但体验还不够“产品化”
+- `npm run verify:mvp` 当前已可作为可信基线
+- `host-qt-follow-up` 的附件消息隐藏 render error 已修复，并已纳入 `verify:mvp` gate
+- `host-qt-browser-panel` 已从静态 bundle 检查升级为真实 Qt 面板交互 verifier
+- 默认启动主路径当前明确为 Sunday 通用对话壳
+- 高噪声前端 / host 启动日志已限制在 smoke 或显式调试场景
+- `typecheck:web` 仍然不是 MVP release gate；它是仓库级历史债，需要按专题继续拆解
 
 ## Next Recommended Work
 
-1. 收默认启动和对外文案
-2. 清理高频噪声
-3. 给出一版简洁的“可演示 MVP”说明
-4. 然后再进入扩展平台方向：
-   - skills
-   - MCP
+1. browser control productization:
+    - 扩展安装路线
+    - 真正的多标签切换能力
+    - 成功截图产物与 OpenCLI 运行时缺口
+    - 截图 / 提取结果展示继续打磨
+2. MCP refinement:
+    - runtime status
+    - tool preview
+    - clearer error feedback
+3. skills / CLI productization:
+   - skills import/install
+   - CLI dynamic discovery / version / auth actions
+4. 然后再进入更大的扩展平台方向：
    - IM bridge
+   - extension install / market flows
+   - architecture / performance cleanup

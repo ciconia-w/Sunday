@@ -40,18 +40,23 @@ async function run() {
                     (match) => match[1],
                 );
                 const sawNewConversation =
-                hostLog.includes("[RootWindow] auto message action clicked: open-branch");
+                    /\[RootWindow\] auto conversation switched: .+ -> .+/.test(hostLog) &&
+                    currentConversationIds.length > 0;
                 const sawFileReinjected =
                     hostLog.includes("[UploadFiles] Received file event: 1") &&
                     hostLog.includes(filePath);
                 const sawFillInputSource = true;
                 hostLog.includes('autoSend=') || hostLog.includes("Summarize the attached file in one short sentence.");
+                const hasRuntimeRenderError =
+                    hostLog.includes("TypeError: Cannot read property 'title' of undefined") ||
+                    hostLog.includes("[app-error-stack]");
 
                 const verdict =
                     sawFollowUpClick &&
                     sawNewConversation &&
                     sawFileReinjected &&
-                    sawFillInputSource
+                    sawFillInputSource &&
+                    !hasRuntimeRenderError
                         ? "host-qt-follow-up-confirmed"
                         : "host-qt-follow-up-incomplete";
 
@@ -63,6 +68,7 @@ async function run() {
                             sawNewConversation,
                             sawFileReinjected,
                             sawFillInputSource,
+                            hasRuntimeRenderError,
                             hostLog,
                             verdict,
                         },

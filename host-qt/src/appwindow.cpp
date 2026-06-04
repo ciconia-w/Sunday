@@ -46,7 +46,7 @@ void AppWindow::initialize(HostContext *context, const QUrl &appUrl)
     m_page->setWebChannel(m_channel);
     setCentralWidget(m_view);
     connect(m_view, &QWebEngineView::loadFinished, this, [](bool ok) {
-        qWarning() << "[host-qt web] loadFinished" << ok;
+        qInfo() << "[host-qt web] loadFinished" << ok;
     });
     m_view->setUrl(appUrl);
 }

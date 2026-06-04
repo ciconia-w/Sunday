@@ -166,7 +166,7 @@ export function ensureDevInjectedChannels() {
     >();
     const workspaceOutlines = new Map<string, { title: string; paragraphs: Array<{ title: string; content: Array<{ title: string }> }> }>();
     let mcpThirdPartyAgreementAccepted = false;
-    const mcpServices = [
+    let mcpServices = [
         {
             id: "filesystem",
             name: "Filesystem",
@@ -181,6 +181,45 @@ export function ensureDevInjectedChannels() {
 
     function clone<T>(value: T): T {
         return JSON.parse(JSON.stringify(value));
+    }
+
+    function parseMcpServiceDraft(jsonConfig: string, description: string) {
+        const parsed = JSON.parse(jsonConfig);
+        const servers = parsed?.mcpServers;
+
+        if (!servers || typeof servers !== "object" || Array.isArray(servers)) {
+            throw new Error("JSON 配置缺少 mcpServers 对象。");
+        }
+
+        const entries = Object.entries(servers);
+        if (entries.length !== 1) {
+            throw new Error("当前仅支持每次保存一个 MCP 服务配置。");
+        }
+
+        const [serviceId, serviceConfig] = entries[0];
+        const normalizedId = serviceId.trim();
+
+        if (!normalizedId) {
+            throw new Error("MCP 服务 ID 不能为空。");
+        }
+
+        const normalizedConfig = JSON.stringify(parsed, null, 2);
+        const inferredDescription =
+            typeof serviceConfig?.command === "string" && serviceConfig.command.trim()
+                ? `Command: ${serviceConfig.command.trim()}`
+                : "Custom MCP service configuration.";
+
+        return {
+            id: normalizedId,
+            name: normalizedId,
+            description: description.trim() || inferredDescription,
+            category: "custom",
+            enabled: true,
+            isBuiltIn: false,
+            editable: true,
+            removable: true,
+            jsonConfig: normalizedConfig,
+        };
     }
 
     function workspaceKey(conversationId: string, articleId: string) {
@@ -644,6 +683,91 @@ export function ensureDevInjectedChannels() {
                 mode: "mock",
                 modeReason: "local mock fallback",
             })),
+            getCliToolsState: callbackify(async () => ([
+                { id: "gh-cli", name: "gh cli", description: "GitHub CLI，管理仓库、PR、Issue。", enabled: true, statusToken: "authorized", statusText: "已授权，demo" },
+                { id: "opencli", name: "opencli", description: "网页到命令行的桥接工具。", enabled: false, statusToken: "extension_disconnected", statusText: "守护进程已运行，插件未连接" },
+                { id: "lark-cli", name: "lark cli", description: "飞书 CLI，文档、消息、表格。", enabled: false, statusToken: "expired", statusText: "授权已过期，Demo" },
+            ])),
+            getBrowserControlState: callbackify(async () => ({
+                enabled: false,
+                daemonRunning: false,
+                extensionConnected: false,
+                daemonLabel: "未运行",
+                extensionLabel: "未连接",
+                version: "",
+                statusSummary: "浏览器控制已关闭",
+                extensionPath: "",
+                outputDir: "",
+                sessionName: "sunday",
+                repoRoot: "",
+                stableTabSwitch: true,
+                stableScreenshotCapture: true,
+                runtimeLimitNotice: "",
+                knownIssues: [],
+                tabSwitchCapabilityDescription: "当前运行时支持稳定的标签页切换。",
+                screenshotCapabilityDescription: "当前运行时支持稳定的整页截图。",
+                screenshotGuidance: "建议先刷新状态并确认插件连接正常；如果仍失败，优先使用页面提取继续完成当前任务。",
+                screenshotActionLabel: "整页截图",
+            })),
+            setBrowserControlEnabled: callbackify(async (enabled: boolean) => ({ enabled })),
+            getBrowserPanelState: callbackify(async () => ({
+                enabled: false,
+                daemonRunning: false,
+                extensionConnected: false,
+                daemonLabel: "未运行",
+                extensionLabel: "未连接",
+                version: "",
+                statusSummary: "浏览器控制已关闭",
+                extensionPath: "",
+                outputDir: "",
+                sessionName: "sunday",
+                repoRoot: "",
+                stableTabSwitch: true,
+                stableScreenshotCapture: true,
+                runtimeLimitNotice: "",
+                knownIssues: [],
+                tabSwitchCapabilityDescription: "当前运行时支持稳定的标签页切换。",
+                screenshotCapabilityDescription: "当前运行时支持稳定的整页截图。",
+                screenshotGuidance: "建议先刷新状态并确认插件连接正常；如果仍失败，优先使用页面提取继续完成当前任务。",
+                screenshotActionLabel: "整页截图",
+                url: "",
+                title: "",
+                interactive: 0,
+                tabs: [],
+            })),
+            startBrowserSessionIfEnabled: callbackify(async () => ({
+                enabled: false,
+                started: false,
+                reason: "disabled",
+            })),
+            initBrowserSession: callbackify(async () => undefined),
+            browserOpenUrl: callbackify(async () => ({
+                ok: false,
+                message: "",
+                error: "浏览器控制未启用（mock）",
+            })),
+            browserNewTab: callbackify(async () => ({
+                ok: false,
+                message: "",
+                error: "浏览器控制未启用（mock）",
+            })),
+            browserSelectTab: callbackify(async () => ({
+                ok: false,
+                message: "",
+                error: "浏览器控制未启用（mock）",
+            })),
+            browserExtractPage: callbackify(async () => ({
+                ok: false,
+                content: "",
+                error: "浏览器控制未启用（mock）",
+            })),
+            browserCaptureScreenshot: callbackify(async () => ({
+                ok: false,
+                screenshotPath: "",
+                error: "浏览器控制未启用（mock）",
+                errorKind: "unavailable",
+                errorHint: "浏览器控制未启用（mock）",
+            })),
             getMcpThirdPartyAgreement: callbackify(async () => mcpThirdPartyAgreementAccepted),
             setMcpThirdPartyAgreement: callbackify(async (accepted: boolean) => {
                 mcpThirdPartyAgreementAccepted = accepted === true;
@@ -651,10 +775,72 @@ export function ensureDevInjectedChannels() {
             }),
             getMcpServices: callbackify(async () => ({
                 success: true,
-                services: mcpServices,
+                services: clone(mcpServices),
                 runtimeReady: true,
                 thirdPartyAgreementAccepted: mcpThirdPartyAgreementAccepted,
             })),
+            setMcpServiceEnabled: callbackify(async (serviceId: string, enabled: boolean) => {
+                const targetService = mcpServices.find((service) => service.id === serviceId);
+
+                if (!targetService) {
+                    throw new Error("MCP 服务不存在。");
+                }
+
+                targetService.enabled = enabled === true;
+                return {
+                    success: true,
+                    services: clone(mcpServices),
+                    runtimeReady: true,
+                    thirdPartyAgreementAccepted: mcpThirdPartyAgreementAccepted,
+                };
+            }),
+            saveMcpService: callbackify(async (jsonConfig: string, description: string, serviceId = "") => {
+                const nextService = parseMcpServiceDraft(jsonConfig, description);
+                const duplicateService = mcpServices.find((service) => service.id === nextService.id);
+
+                if (!serviceId) {
+                    if (duplicateService) {
+                        throw new Error(`MCP 服务 "${nextService.id}" 已存在。`);
+                    }
+
+                    mcpServices.push(nextService);
+                } else {
+                    const targetIndex = mcpServices.findIndex((service) => service.id === serviceId && !service.isBuiltIn);
+
+                    if (targetIndex < 0) {
+                        throw new Error("只能编辑自定义 MCP 服务。");
+                    }
+
+                    if (duplicateService && duplicateService.id !== serviceId) {
+                        throw new Error(`MCP 服务 "${nextService.id}" 已存在。`);
+                    }
+
+                    nextService.enabled = mcpServices[targetIndex].enabled;
+                    mcpServices.splice(targetIndex, 1, nextService);
+                }
+
+                return {
+                    success: true,
+                    services: clone(mcpServices),
+                    runtimeReady: true,
+                    thirdPartyAgreementAccepted: mcpThirdPartyAgreementAccepted,
+                };
+            }),
+            deleteMcpService: callbackify(async (serviceId: string) => {
+                const nextServices = mcpServices.filter((service) => service.id !== serviceId || service.isBuiltIn);
+
+                if (nextServices.length === mcpServices.length) {
+                    throw new Error("只能删除自定义 MCP 服务。");
+                }
+
+                mcpServices = nextServices;
+                return {
+                    success: true,
+                    services: clone(mcpServices),
+                    runtimeReady: true,
+                    thirdPartyAgreementAccepted: mcpThirdPartyAgreementAccepted,
+                };
+            }),
         },
     } as never;
 }

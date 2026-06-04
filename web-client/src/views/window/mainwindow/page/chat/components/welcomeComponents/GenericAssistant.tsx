@@ -1,14 +1,16 @@
-import { computed, defineComponent } from "vue";
-import { useBackendStore, useConversationManagerStore, useMainWindowStore } from "@/stores";
+import { computed, defineComponent, inject } from "vue";
+import { useConversationManagerStore, useMainWindowStore } from "@/stores";
 import { ConversationStatus, type ConversationIndexWithStatus } from "@/types/conversation";
+import { CHAT_INPUT_KEY, type ChatInputContext } from "@/types/chat-input";
+import { STARTER_TASKS } from "@/configs/starterTasks";
 
 export default defineComponent({
     name: "GenericAssistant",
 
     setup() {
-        const backendStore = useBackendStore();
         const conversationManagerStore = useConversationManagerStore();
         const mainWindowStore = useMainWindowStore();
+        const chatInputContext = inject<ChatInputContext | null>(CHAT_INPUT_KEY, null);
 
         const recentConversationCandidates = computed<ConversationIndexWithStatus[]>(() => {
             const currentConversationId = conversationManagerStore.getCurrentConversationId;
@@ -24,6 +26,10 @@ export default defineComponent({
         const recentWorkPanelDesc = computed(() => "回到最近一次对话，继续当前任务。");
         const recentWorkActionLabel = computed(() => "打开会话");
         const recentWorkEmptyText = computed(() => "完成第一条任务后，最近的对话会显示在这里。");
+        const starterPanelTitle = computed(() => "快速起手");
+        const starterPanelDesc = computed(() => "先预填一个常用任务，再按你的方式继续。");
+        const starterTasks = computed(() => STARTER_TASKS);
+        const canApplyStarterTask = computed(() => !chatInputContext?.isInputDisabled?.());
         const getRecentConversationSummary = (conversation: ConversationIndexWithStatus) => {
             return String(conversation.introduction ?? "")
                 .replace(/\s+/g, " ")
@@ -74,6 +80,15 @@ export default defineComponent({
             await mainWindowStore.openChatPage();
         };
 
+        const handleApplyStarterTask = (prompt: string) => {
+            if (!chatInputContext || !prompt || chatInputContext.isInputDisabled?.()) {
+                return;
+            }
+
+            chatInputContext.fillInput(prompt, "replace");
+            chatInputContext.focusInput();
+        };
+
         return {
             recentConversationCandidates,
             hasRecentConversations,
@@ -81,11 +96,16 @@ export default defineComponent({
             recentWorkPanelDesc,
             recentWorkActionLabel,
             recentWorkEmptyText,
+            starterPanelTitle,
+            starterPanelDesc,
+            starterTasks,
+            canApplyStarterTask,
             getRecentConversationSummary,
             getRecentConversationTitle,
             formatRecentConversationTime,
             getRecentConversationStatusLabel,
             handleOpenRecentConversation,
+            handleApplyStarterTask,
         };
     },
 
@@ -138,6 +158,31 @@ export default defineComponent({
                     ) : (
                         <div class="generic-assistant__recent-empty">{this.recentWorkEmptyText}</div>
                     )}
+                </div>
+                <div class="generic-assistant__start-panel">
+                    <div class="generic-assistant__starter-header">
+                        <div class="generic-assistant__starter-title">{this.starterPanelTitle}</div>
+                        <div class="generic-assistant__starter-desc">{this.starterPanelDesc}</div>
+                    </div>
+                    <div class="generic-assistant__start-list">
+                        {this.starterTasks.map((item) => (
+                            <button
+                                key={item.id}
+                                type="button"
+                                class="generic-assistant__start-card"
+                                data-welcome-starter-card="true"
+                                data-welcome-starter-id={item.id}
+                                disabled={!this.canApplyStarterTask}
+                                onClick={() => this.handleApplyStarterTask(item.prompt)}
+                            >
+                                <span class="generic-assistant__start-card-icon">{item.icon}</span>
+                                <div class="generic-assistant__start-card-body">
+                                    <div class="generic-assistant__start-card-title">{item.title}</div>
+                                    <div class="generic-assistant__start-card-desc">{item.description}</div>
+                                </div>
+                            </button>
+                        ))}
+                    </div>
                 </div>
 
             </div>

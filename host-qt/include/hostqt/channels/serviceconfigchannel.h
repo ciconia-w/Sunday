@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QObject>
+#include <QJsonArray>
 #include <QJsonObject>
 
 namespace hostqt {
@@ -25,6 +26,17 @@ public slots:
     bool isMcpRuntimeReady() const;
     bool checkDocumentConversionCapability() const;
     QJsonObject getRuntimeStatus() const;
+    QJsonArray getCliToolsState() const;
+    QJsonObject getBrowserControlState() const;
+    QJsonObject setBrowserControlEnabled(bool enabled) const;
+    QJsonObject getBrowserPanelState() const;
+    QJsonObject startBrowserSessionIfEnabled() const;
+    QJsonObject initBrowserSession() const;
+    QJsonObject browserOpenUrl(const QString &url) const;
+    QJsonObject browserNewTab(const QString &url) const;
+    QJsonObject browserSelectTab(const QString &pageId) const;
+    QJsonObject browserExtractPage() const;
+    QJsonObject browserCaptureScreenshot(const QString &outputPath) const;
     QJsonObject getModelConfig() const;
     QJsonObject saveModelConfig(
         const QString &provider,
@@ -34,6 +46,10 @@ public slots:
     bool getMcpThirdPartyAgreement() const;
     void setMcpThirdPartyAgreement(bool agreed);
     QJsonObject getMcpServices() const;
+    QJsonObject setMcpServiceEnabled(const QString &serviceId, bool enabled) const;
+    QJsonObject saveMcpService(const QString &jsonConfig, const QString &description, const QString &serviceId = QString()) const;
+    QJsonObject deleteMcpService(const QString &serviceId) const;
+    bool installApp(const QString &appId) const;
 
 private:
     SidecarClient *m_sidecarClient = nullptr;

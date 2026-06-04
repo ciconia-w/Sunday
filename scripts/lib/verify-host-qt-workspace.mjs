@@ -25,6 +25,7 @@ export async function verifyHostQtWorkspace(options) {
         workspace,
         staticPort,
         sidecarPort,
+        extraQueryParams = {},
         expectedBundleMarkers,
         verdictConfirmed,
         verdictIncomplete,
@@ -67,7 +68,13 @@ export async function verifyHostQtWorkspace(options) {
         await waitForHttp(`http://127.0.0.1:${staticPort}`);
         await waitForHttp(`http://127.0.0.1:${sidecarPort}/state`);
 
-        const frontUrl = `http://127.0.0.1:${staticPort}/?disableResizeObservers=1&workspace=${workspace}#/`;
+        const frontUrl = new URL(`http://127.0.0.1:${staticPort}/`);
+        frontUrl.searchParams.set("disableResizeObservers", "1");
+        frontUrl.searchParams.set("workspace", workspace);
+        for (const [key, value] of Object.entries(extraQueryParams)) {
+            frontUrl.searchParams.set(key, String(value));
+        }
+        frontUrl.hash = "/";
         const hostLog = await new Promise((resolve) => {
             const child = spawn(hostBin, [], {
                 env: {
@@ -79,7 +86,7 @@ export async function verifyHostQtWorkspace(options) {
                     QTWEBENGINE_DISABLE_SANDBOX: "1",
                     QTWEBENGINE_CHROMIUM_FLAGS: "--no-sandbox --disable-gpu",
                     PERSONAL_AGENT_AUTOSTART_SIDECAR: "0",
-                    PERSONAL_AGENT_FRONT_URL: frontUrl,
+                    PERSONAL_AGENT_FRONT_URL: frontUrl.toString(),
                     PERSONAL_AGENT_SIDECAR_URL: `http://127.0.0.1:${sidecarPort}`,
                     PERSONAL_AGENT_SMOKE_EXIT_MS: "8000",
                 },

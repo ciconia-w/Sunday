@@ -1,8 +1,9 @@
 import { hexToRgb } from "./hexToRgb";
 import { useMainWindowStore } from "@/stores/mainwindow";
+import { debugUiLog } from "./debugLogging";
 
 export const updateActiveColor = (activeColor: string) => {
-    console.log("activeColor : ", activeColor);
+    debugUiLog("activeColor : ", activeColor);
     document.documentElement.style.setProperty("--system-active-color", activeColor);
     const rgb = hexToRgb(activeColor).rgbStr; // Convert hex to rgb
     document.documentElement.style.setProperty("--system-active-color-alpha-05", `rgba(${rgb},0.05)`);
@@ -18,7 +19,7 @@ export const updateActiveColor = (activeColor: string) => {
 };
 
 export const updateFont = (fontInfo: string) => {
-    console.log("fontInfo : ", fontInfo); // 字体大小
+    debugUiLog("fontInfo : ", fontInfo); // 字体大小
     const fontInfoList = fontInfo.split("#");
     document.documentElement.style.fontFamily = fontInfoList[0] as string; // 字体类型
     document.documentElement.style.fontSize = fontInfoList[1] + "px"; // 字体大小
@@ -26,7 +27,7 @@ export const updateFont = (fontInfo: string) => {
 };
 
 export const updateThemeColor = (themeColor: number) => {
-    console.log("themeColor : ", themeColor);
+    debugUiLog("themeColor : ", themeColor);
     const theme = themeColor === 2 ? "dark" : "light";
     document.querySelector("html")?.setAttribute("class", theme);
 

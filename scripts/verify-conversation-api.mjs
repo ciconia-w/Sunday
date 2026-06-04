@@ -1,3 +1,5 @@
+import { withSidecarRuntime } from "./sidecar-verify-runtime.mjs";
+
 const now = Date.now();
 
 const payload = {
@@ -18,8 +20,8 @@ const payload = {
 
 const assistantId = `assistant-${now}`;
 
-async function post(path, body) {
-    const response = await fetch(`http://127.0.0.1:8787${path}`, {
+async function post(baseUrl, path, body) {
+    const response = await fetch(`${baseUrl}${path}`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(body ?? {}),
@@ -27,45 +29,53 @@ async function post(path, body) {
     return response.json();
 }
 
-const sendRes = await post("/session/send", {
-    params: JSON.stringify(payload),
+await withSidecarRuntime({ sidecarPort: 8787 }, async ({ sidecarPort }) => {
+    const baseUrl = `http://127.0.0.1:${sidecarPort}`;
+    const sendRes = await post(baseUrl, "/session/send", {
+        params: JSON.stringify(payload),
+    });
+
+    const renderRes = await post(baseUrl, "/conversation/set-render", {
+        conversationId: payload.conversation_id,
+        messageId: assistantId,
+        renderJson: JSON.stringify([{ type: "text", data: { content: "history-check-reply" } }]),
+    });
+
+    const saveRes = await post(baseUrl, "/conversation/save", {
+        id: payload.conversation_id,
+    });
+
+    const indexes = await post(baseUrl, "/conversation/indexes", {});
+    const conversation = await post(baseUrl, "/conversation/get", { id: payload.conversation_id });
+
+    await post(baseUrl, "/conversation/delete", {
+        ids: [payload.conversation_id],
+    }).catch(() => undefined);
+
+    const verdict =
+        sendRes?.ok === true &&
+        renderRes?.result === true &&
+        saveRes?.result === true &&
+        (indexes.result || []).some((item) => item.id === payload.conversation_id) &&
+        conversation?.result?.messages?.[assistantId]
+            ? "conversation-api-confirmed"
+            : "conversation-api-incomplete";
+
+    console.log(
+        JSON.stringify(
+            {
+                sidecarPort,
+                sendRes,
+                renderRes,
+                saveRes,
+                indexHit: (indexes.result || []).find((item) => item.id === payload.conversation_id) || null,
+                conversation: conversation.result,
+                verdict,
+            },
+            null,
+            2,
+        ),
+    );
+
+    process.exit(verdict === "conversation-api-confirmed" ? 0 : 1);
 });
-
-const renderRes = await post("/conversation/set-render", {
-    conversationId: payload.conversation_id,
-    messageId: assistantId,
-    renderJson: JSON.stringify([{ type: "text", data: { content: "history-check-reply" } }]),
-});
-
-const saveRes = await post("/conversation/save", {
-    id: payload.conversation_id,
-});
-
-const indexes = await post("/conversation/indexes", {});
-const conversation = await post("/conversation/get", { id: payload.conversation_id });
-
-await post("/conversation/delete", {
-    ids: [payload.conversation_id],
-}).catch(() => undefined);
-
-console.log(
-    JSON.stringify(
-        {
-            sendRes,
-            renderRes,
-            saveRes,
-            indexHit: (indexes.result || []).find((item) => item.id === payload.conversation_id) || null,
-            conversation: conversation.result,
-            verdict:
-                sendRes?.ok === true &&
-                renderRes?.result === true &&
-                saveRes?.result === true &&
-                (indexes.result || []).some((item) => item.id === payload.conversation_id) &&
-                conversation?.result?.messages?.[assistantId]
-                    ? "conversation-api-confirmed"
-                    : "conversation-api-incomplete",
-        },
-        null,
-        2,
-    ),
-);

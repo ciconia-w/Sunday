@@ -25,12 +25,26 @@ void WebPage::javaScriptConsoleMessage(
         return;
     }
 
-    qWarning().noquote()
-        << "[host-qt web]"
-        << "level=" << level
-        << "source=" << sourceID
-        << "line=" << lineNumber
-        << normalizedMessage;
+    auto writeLog = [&](auto stream) {
+        stream.noquote()
+            << "[host-qt web]"
+            << "level=" << level
+            << "source=" << sourceID
+            << "line=" << lineNumber
+            << normalizedMessage;
+    };
+
+    switch (level) {
+    case QWebEnginePage::InfoMessageLevel:
+        writeLog(qInfo());
+        break;
+    case QWebEnginePage::WarningMessageLevel:
+        writeLog(qWarning());
+        break;
+    case QWebEnginePage::ErrorMessageLevel:
+        writeLog(qCritical());
+        break;
+    }
 }
 
 } // namespace hostqt

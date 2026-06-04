@@ -5,14 +5,14 @@ const bundlePath = getBuiltBundlePath();
 const bundle = await readFile(bundlePath, "utf8");
 
 const markers = [
-    "settings-home-page__grid",
-    "settings-home-page__card",
-    "核心设置",
+    "settings-page__nav",
+    "settings-page__panel",
+    "设置",
     "运行诊断",
     "模型配置",
-    "扩展管理",
     "扩展中心",
-    "技能、CLI 工具和",
+    "技能 / CLI / MCP",
+    "统一管理技能、CLI 工具和 MCP 服务。",
     "外观",
     "跟随系统",
     "浅色",

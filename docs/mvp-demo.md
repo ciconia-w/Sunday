@@ -2,7 +2,7 @@
 
 ## What This Is
 
-This is the current MVP of a **`pi agent` desktop client shell**.
+This is the current MVP of the **Sunday desktop shell for `pi agent`**.
 
 It already supports:
 
@@ -29,7 +29,11 @@ npm run run:chat
 Expected:
 
 - Qt desktop shell opens
-- a generic agent conversation is auto-started
+- the shell lands on the generic Sunday chat path
+- the welcome surface shows:
+  - recent conversation resume
+  - quick starter-task prefills
+  - no startup onboarding modal
 - a real live response comes back
 
 ### Optional writing workspace path
@@ -64,12 +68,13 @@ This verifies:
 4. Qt host live tool-call visibility
 5. host file channel protocol
 6. Qt host file add / parse / delete flow
+7. welcome surface, settings entry points, and unified extensions shell
 
 ## Known Non-Blocking Noise
 
-- some Qt console noise still exists
-- `QCoreApplication::postEvent: Unexpected null receiver`
-- some secondary UI text still reflects earlier prototype history, but the main MVP path is already aligned to `PI Agent`
+- routine startup log noise is now suppressed to smoke / explicit debug paths
+- low-frequency Qt runtime noise may still appear, including `QCoreApplication::postEvent: Unexpected null receiver`
+- repo-wide front-end type debt still exists outside the maintained MVP paths
 
 ## Current Settings Surface
 
@@ -83,8 +88,9 @@ Current behavior:
 `Settings Home` currently surfaces:
 
 - runtime diagnostics
-- quick runtime config
+- model configuration entry
 - unified extensions entry
+- browser-control status entry when the feature is enabled in the current branch
 
 These workspace pages can now be launched directly through the shell startup path:
 

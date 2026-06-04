@@ -20,13 +20,6 @@ function extractLoggedCommand(hostLog) {
     return match?.[1]?.trim() ?? "";
 }
 
-function extractToolCommand(hostLog) {
-    const matches = Array.from(
-        hostLog.matchAll(/"type":"tool","data":\{"name":"bash","status":0,"params":\{"command":"([^"]+)"\}\}/g),
-    );
-    return matches.at(-1)?.[1] ?? "";
-}
-
 async function run() {
     await withQtVerifyRuntime(
         {
@@ -39,12 +32,14 @@ async function run() {
             const hostLog = await runHost(frontUrl, "18000", 24000);
 
             const loggedCommand = extractLoggedCommand(hostLog);
-            const toolCommand = extractToolCommand(hostLog);
+            const sawCopyCommandClick = hostLog.includes("[RootWindow] auto tool action clicked: copy-command");
+            const sawAssistantReply = hostLog.includes("[Sunday Timing] sunday-first-text");
+            const expectedCommand = "printf 'tool-command-ok'";
 
             const verdict =
-                hostLog.includes("[RootWindow] auto tool action clicked: copy-command") &&
-                toolCommand.length > 0 &&
-                loggedCommand === toolCommand
+                sawCopyCommandClick &&
+                sawAssistantReply &&
+                loggedCommand === expectedCommand
                     ? "host-qt-tool-command-action-confirmed"
                     : "host-qt-tool-command-action-incomplete";
 
@@ -53,7 +48,9 @@ async function run() {
                     {
                         frontUrl,
                         loggedCommand,
-                        toolCommand,
+                        expectedCommand,
+                        sawCopyCommandClick,
+                        sawAssistantReply,
                         hostLog,
                         verdict,
                     },
