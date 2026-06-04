@@ -11,6 +11,7 @@ await verifyHostQtWorkspace({
         "CLI",
         "MCP",
         "导入技能",
+        "GitHub 导入",
         "管理当前接入 Sunday 的内置技能与本地扩展能力。",
         "打开安装目录",
         "tool-management-list-item__detail",

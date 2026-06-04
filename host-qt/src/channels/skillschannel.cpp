@@ -96,6 +96,38 @@ QJsonObject SkillsChannel::addSkillForWeb() const
     return root;
 }
 
+QJsonObject SkillsChannel::addGithubSkillForWeb(const QString &repoInput) const
+{
+    QJsonObject root;
+    if (!m_sidecarClient) {
+        root.insert("success", false);
+        root.insert("error", QStringLiteral("sidecar unavailable"));
+        return root;
+    }
+
+    const QString normalizedInput = repoInput.trimmed();
+    if (normalizedInput.isEmpty()) {
+        root.insert("success", false);
+        root.insert("error", QStringLiteral("GitHub repository input is required"));
+        return root;
+    }
+
+    QString errorMessage;
+    const QJsonObject importedSkill = m_sidecarClient->postJsonSync(
+        QStringLiteral("/skills/import-github"),
+        QVariantMap{{QStringLiteral("repoInput"), normalizedInput}},
+        &errorMessage);
+    if (!errorMessage.isEmpty()) {
+        root.insert("success", false);
+        root.insert("error", errorMessage);
+        return root;
+    }
+
+    root.insert("success", true);
+    root.insert("skill", importedSkill);
+    return root;
+}
+
 bool SkillsChannel::removeSkill(const QString &skillName)
 {
     if (!m_sidecarClient) {

@@ -38,6 +38,7 @@ export default defineComponent({
         const emptyText = computed(() => backendStore.translate("暂无可用技能。"));
         const refreshButtonText = computed(() => backendStore.translate("刷新"));
         const importButtonText = computed(() => backendStore.translate("导入技能"));
+        const githubImportButtonText = computed(() => backendStore.translate("GitHub 导入"));
 
         const handleRefresh = async () => {
             await skillsStore.refreshSkills().catch(() => undefined);
@@ -67,6 +68,45 @@ export default defineComponent({
                     message:
                         error instanceof Error ? error.message : backendStore.translate("导入技能失败，请稍后重试。"),
                     duration: 2600,
+                });
+            }
+        };
+
+        const handleImportGithubSkill = async () => {
+            const repoInput = typeof window !== "undefined"
+                ? window.prompt(
+                    backendStore.translate("输入 GitHub 仓库或技能子目录，例如 owner/repo 或 https://github.com/owner/repo/tree/main/skills/my-skill"),
+                    "",
+                )
+                : "";
+            const normalizedInput = typeof repoInput === "string" ? repoInput.trim() : "";
+            if (!normalizedInput) {
+                return;
+            }
+
+            try {
+                const result = await backendStore.requestSkillsMgr("addGithubSkillForWeb", normalizedInput) as SkillImportResult;
+
+                if (result.success) {
+                    notifyStore.showToast({
+                        type: "success",
+                        message: backendStore.translate("GitHub 技能导入成功。"),
+                        duration: 1400,
+                    });
+                    await skillsStore.refreshSkills();
+                } else if (result.error) {
+                    notifyStore.showToast({
+                        type: "error",
+                        message: result.error,
+                        duration: 3200,
+                    });
+                }
+            } catch (error) {
+                notifyStore.showToast({
+                    type: "error",
+                    message:
+                        error instanceof Error ? error.message : backendStore.translate("GitHub 技能导入失败，请稍后重试。"),
+                    duration: 3200,
                 });
             }
         };
@@ -122,8 +162,10 @@ export default defineComponent({
             emptyText,
             refreshButtonText,
             importButtonText,
+            githubImportButtonText,
             handleRefresh,
             handleImportSkill,
+            handleImportGithubSkill,
             handleToggleSkill,
             skillDirectoryAction,
             handleDeleteSkill,
@@ -147,6 +189,7 @@ export default defineComponent({
                             <div class="skills-page__actions">
                                 <TextButton text={this.refreshButtonText} onClick={this.handleRefresh} />
                                 <TextButton text={this.importButtonText} onClick={this.handleImportSkill} />
+                                <TextButton text={this.githubImportButtonText} onClick={this.handleImportGithubSkill} />
                             </div>
                         </div>
                     </div>

@@ -1,4 +1,5 @@
 import { withSidecarRuntime } from "./sidecar-verify-runtime.mjs";
+import { execFile } from "node:child_process";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -12,13 +13,28 @@ async function post(baseUrl, path, body) {
     return response.json();
 }
 
+async function runCommand(command, args, cwd) {
+    return new Promise((resolve, reject) => {
+        execFile(command, args, { cwd }, (error, stdout, stderr) => {
+            if (error) {
+                reject(new Error(String(stderr || stdout || error.message || error)));
+                return;
+            }
+            resolve(String(stdout || ""));
+        });
+    });
+}
+
 const tempRoot = await mkdtemp(join(tmpdir(), "sunday-skills-verify-"));
 const managedSkillsRoot = join(tempRoot, "managed-skills");
 const importSourceRoot = join(tempRoot, "import-source");
 const importSkillDir = join(importSourceRoot, "sample-local-skill");
+const githubRepoRoot = join(tempRoot, "github-source");
+const githubSkillDir = join(githubRepoRoot, "skills", "sample-github-skill");
 
 await mkdir(managedSkillsRoot, { recursive: true });
 await mkdir(importSkillDir, { recursive: true });
+await mkdir(githubSkillDir, { recursive: true });
 await writeFile(
     join(importSkillDir, "SKILL.md"),
     [
@@ -31,6 +47,26 @@ await writeFile(
         "Use this skill to verify local import and removal.",
     ].join("\n"),
     "utf8",
+);
+await writeFile(
+    join(githubSkillDir, "SKILL.md"),
+    [
+        "---",
+        "name: sample-github-skill",
+        "---",
+        "",
+        "Sample GitHub-imported skill for Sunday verification.",
+        "",
+        "Use this skill to verify repository clone import and removal.",
+    ].join("\n"),
+    "utf8",
+);
+await runCommand("git", ["init", "-b", "main"], githubRepoRoot);
+await runCommand("git", ["add", "."], githubRepoRoot);
+await runCommand(
+    "git",
+    ["-c", "user.name=Sunday Verify", "-c", "user.email=sunday-verify@example.com", "commit", "-m", "Add sample skill"],
+    githubRepoRoot,
 );
 
 let exitCode = 1;
@@ -53,6 +89,9 @@ try {
             let importResult = null;
             let importedHasResult = null;
             let removeImportedResult = null;
+            let githubImportResult = null;
+            let githubImportedHasResult = null;
+            let removeGithubImportedResult = null;
             let reloadedSkillsData = null;
             let removeMissingResult = null;
 
@@ -79,6 +118,18 @@ try {
                 skillName: "sample-local-skill",
             });
 
+            githubImportResult = await post(baseUrl, "/skills/import-github", {
+                repoInput: githubRepoRoot,
+            });
+
+            githubImportedHasResult = await post(baseUrl, "/skills/has", {
+                skillName: "sample-github-skill",
+            });
+
+            removeGithubImportedResult = await post(baseUrl, "/skills/remove", {
+                skillName: "sample-github-skill",
+            });
+
             reloadedSkillsData = await post(baseUrl, "/skills/data", {});
             removeMissingResult = await post(baseUrl, "/skills/remove", {
                 skillName: "__nonexistent_skill__",
@@ -88,7 +139,8 @@ try {
                 ? [...new Set(skillsData.result.map((skill) => skill?.source).filter(Boolean))]
                 : [];
             const importedSkillStillPresent = Array.isArray(reloadedSkillsData?.result)
-                ? reloadedSkillsData.result.some((skill) => skill?.name === "sample-local-skill")
+                ? reloadedSkillsData.result.some((skill) =>
+                    skill?.name === "sample-local-skill" || skill?.name === "sample-github-skill")
                 : false;
 
             const verdict =
@@ -109,6 +161,13 @@ try {
                 importedHasResult?.result === true &&
                 removeImportedResult?.ok === true &&
                 removeImportedResult?.result === true &&
+                githubImportResult?.ok === true &&
+                githubImportResult?.result?.name === "sample-github-skill" &&
+                githubImportResult?.result?.source === "local" &&
+                githubImportedHasResult?.ok === true &&
+                githubImportedHasResult?.result === true &&
+                removeGithubImportedResult?.ok === true &&
+                removeGithubImportedResult?.result === true &&
                 reloadedSkillsData?.ok === true &&
                 importedSkillStillPresent === false &&
                 removeMissingResult?.ok === true &&
@@ -128,6 +187,9 @@ try {
                         importResult,
                         importedHasResult,
                         removeImportedResult,
+                        githubImportResult,
+                        githubImportedHasResult,
+                        removeGithubImportedResult,
                         removeMissingResult,
                         importedSkillStillPresent,
                         verdict,

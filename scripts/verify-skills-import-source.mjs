@@ -13,8 +13,12 @@ const [skillsChannelSource, skillsRegistrySource] = await Promise.all([
 const checks = {
     hostUsesDirectoryPicker: skillsChannelSource.includes("QFileDialog::getExistingDirectory"),
     hostPostsImportEndpoint: skillsChannelSource.includes("/skills/import-local"),
+    hostPostsGithubImportEndpoint: skillsChannelSource.includes("/skills/import-github"),
     hostNoLongerStubbed: !skillsChannelSource.includes("not implemented"),
     registrySupportsImport: skillsRegistrySource.includes("async importSkill("),
+    registrySupportsGithubImport: skillsRegistrySource.includes("async importGithubSkill("),
+    registryParsesGithubSpec: skillsRegistrySource.includes("github.com")
+        && skillsRegistrySource.includes("owner/repo"),
     registrySupportsManagedRemoval: skillsRegistrySource.includes("async removeSkill(")
         && skillsRegistrySource.includes("skill.source !== \"local\""),
 };
