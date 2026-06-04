@@ -61,6 +61,23 @@ interface IngressReplayQueueEntry {
     nextAttemptAt: string;
     lastAttemptAt: string;
     history: IngressReplayHistoryEvent[];
+    latestReceipt?: {
+        actor?: string;
+        mode?: string;
+        transport?: string;
+        ok?: boolean;
+        statusCode?: number;
+        at?: string;
+        error?: string;
+        providerPayloadPreview?: string;
+    } | null;
+    processing?: {
+        ownerId?: string;
+        ownerKind?: string;
+        mode?: string;
+        claimedAt?: string;
+        expiresAt?: string;
+    } | null;
 }
 
 interface IngressReplayQueueState {
@@ -75,6 +92,7 @@ interface IngressReplayQueueState {
     counts: {
         total: number;
         pending: number;
+        processing: number;
         delivered: number;
         awaitingOperator: number;
         resolved: number;
@@ -123,6 +141,12 @@ interface IngressOperatorState {
             pausedAt: string;
             updatedAt: string;
         };
+        ownership: {
+            routePersistence: string;
+            replayQueuePersistence: string;
+            automaticReplayExecutor: string;
+            serviceUsesSidecarOperatorApi: boolean;
+        };
     };
     runtimeNote: string;
 }
@@ -141,6 +165,7 @@ const createDefaultOperatorState = (): IngressOperatorState => ({
         counts: {
             total: 0,
             pending: 0,
+            processing: 0,
             delivered: 0,
             awaitingOperator: 0,
             resolved: 0,
@@ -184,6 +209,12 @@ const createDefaultOperatorState = (): IngressOperatorState => ({
             pauseReason: "",
             pausedAt: "",
             updatedAt: "",
+        },
+        ownership: {
+            routePersistence: "",
+            replayQueuePersistence: "",
+            automaticReplayExecutor: "",
+            serviceUsesSidecarOperatorApi: false,
         },
     },
     runtimeNote: "当前没有可用的 ingress operator 状态。",
@@ -328,6 +359,8 @@ export default defineComponent({
                             ? state.replayQueue.entries.map((entry) => ({
                                 ...entry,
                                 history: Array.isArray(entry?.history) ? entry.history : [],
+                                latestReceipt: entry?.latestReceipt || null,
+                                processing: entry?.processing || null,
                             }))
                             : [],
                     },
@@ -345,6 +378,10 @@ export default defineComponent({
                         control: {
                             ...createDefaultOperatorState().backgroundReplay.control,
                             ...(state?.backgroundReplay?.control || {}),
+                        },
+                        ownership: {
+                            ...createDefaultOperatorState().backgroundReplay.ownership,
+                            ...(state?.backgroundReplay?.ownership || {}),
                         },
                     },
                     routes: Array.isArray(state?.routes) ? state.routes : [],
@@ -512,6 +549,23 @@ export default defineComponent({
         const supportedTransportText = computed(() =>
             operatorState.value.supportedReplyTransports.map(normalizeTransportLabel).join(" / "),
         );
+        const queueOwnershipText = computed(() => {
+            const ownership = operatorState.value.backgroundReplay.ownership;
+            if (!ownership.replayQueuePersistence) {
+                return "未提供";
+            }
+
+            return `${ownership.replayQueuePersistence} / ${ownership.automaticReplayExecutor || "unknown"}`;
+        });
+        const routeOwnershipText = computed(() => {
+            const ownership = operatorState.value.backgroundReplay.ownership;
+            return ownership.routePersistence || "未提供";
+        });
+        const operatorApiDependencyText = computed(() => {
+            return operatorState.value.backgroundReplay.ownership.serviceUsesSidecarOperatorApi
+                ? "依赖 sidecar operator API"
+                : "worker 直接访问 shared store";
+        });
         const backgroundReplayControlText = computed(() => {
             if (!operatorState.value.backgroundReplay.enabled) {
                 return "未启用";
@@ -547,6 +601,11 @@ export default defineComponent({
                 value: String(operatorState.value.replayQueue.counts.pending),
             },
             {
+                key: "processing",
+                label: "Processing",
+                value: String(operatorState.value.replayQueue.counts.processing),
+            },
+            {
                 key: "awaiting",
                 label: "Awaiting Operator",
                 value: String(operatorState.value.replayQueue.counts.awaitingOperator),
@@ -564,11 +623,11 @@ export default defineComponent({
         ]);
 
         const canReplayEntry = (entry: IngressReplayQueueEntry) => {
-            return ["pending", "awaiting-operator"].includes(entry.status);
+            return ["pending", "awaiting-operator"].includes(entry.status) && !entry.processing?.ownerId;
         };
 
         const canResolveEntry = (entry: IngressReplayQueueEntry) => {
-            return !["resolved", "discarded"].includes(entry.status);
+            return !["resolved", "discarded"].includes(entry.status) && !entry.processing?.ownerId;
         };
 
         const isActionPending = (entryId: string, actionKey: string) => {
@@ -602,6 +661,9 @@ export default defineComponent({
             resumeButtonText,
             workerModeText,
             supportedTransportText,
+            queueOwnershipText,
+            routeOwnershipText,
+            operatorApiDependencyText,
             backgroundReplayControlText,
             workerRuntimeText,
             summaryBadges,
@@ -707,6 +769,14 @@ export default defineComponent({
                                                 <div class="ingress-operator-page__fact-label">当前模式</div>
                                                 <div class="ingress-operator-page__fact-value">{this.workerModeText}</div>
                                             </div>
+                                            <div class="ingress-operator-page__fact-item" data-ingress-operator-queue-ownership>
+                                                <div class="ingress-operator-page__fact-label">Queue Ownership</div>
+                                                <div class="ingress-operator-page__fact-value">{this.queueOwnershipText}</div>
+                                            </div>
+                                            <div class="ingress-operator-page__fact-item" data-ingress-operator-route-ownership>
+                                                <div class="ingress-operator-page__fact-label">Route Persistence</div>
+                                                <div class="ingress-operator-page__fact-value">{this.routeOwnershipText}</div>
+                                            </div>
                                             <div class="ingress-operator-page__fact-item">
                                                 <div class="ingress-operator-page__fact-label">支持回推</div>
                                                 <div class="ingress-operator-page__fact-value">{this.supportedTransportText}</div>
@@ -736,6 +806,10 @@ export default defineComponent({
                                             <div class="ingress-operator-page__fact-item" data-ingress-operator-service-runtime>
                                                 <div class="ingress-operator-page__fact-label">Worker 状态</div>
                                                 <div class="ingress-operator-page__fact-value">{this.workerRuntimeText}</div>
+                                            </div>
+                                            <div class="ingress-operator-page__fact-item" data-ingress-operator-api-dependency>
+                                                <div class="ingress-operator-page__fact-label">Worker Access</div>
+                                                <div class="ingress-operator-page__fact-value">{this.operatorApiDependencyText}</div>
                                             </div>
                                             {this.operatorState.backgroundReplay.control.paused && (
                                                 <div class="ingress-operator-page__fact-item" data-ingress-operator-paused-at>
@@ -835,6 +909,33 @@ export default defineComponent({
                                                             <div>Updated: {this.formatTimeLabel(entry.updatedAt) || "-"}</div>
                                                             {entry.latestError ? <div>Latest Error: {entry.latestError}</div> : null}
                                                         </div>
+                                                        {entry.latestReceipt && (
+                                                            <div class="ingress-operator-page__row-detail" data-ingress-replay-latest-receipt>
+                                                                <div>
+                                                                    Latest Receipt: {entry.latestReceipt.ok ? "success" : "failed"}
+                                                                    {" / "}
+                                                                    {entry.latestReceipt.actor || "unknown"}
+                                                                    {" / "}
+                                                                    {entry.latestReceipt.mode || "unknown"}
+                                                                    {entry.latestReceipt.statusCode ? ` / HTTP ${entry.latestReceipt.statusCode}` : ""}
+                                                                </div>
+                                                                <div>At: {this.formatTimeLabel(entry.latestReceipt.at || "") || "-"}</div>
+                                                                {entry.latestReceipt.error ? <div>Error: {entry.latestReceipt.error}</div> : null}
+                                                            </div>
+                                                        )}
+                                                        {entry.processing?.ownerId && (
+                                                            <div class="ingress-operator-page__row-detail" data-ingress-replay-processing>
+                                                                <div>
+                                                                    Processing: {entry.processing.ownerKind || "worker"}
+                                                                    {" / "}
+                                                                    {entry.processing.ownerId}
+                                                                    {" / "}
+                                                                    {entry.processing.mode || "unknown"}
+                                                                </div>
+                                                                <div>Claimed: {this.formatTimeLabel(entry.processing.claimedAt || "") || "-"}</div>
+                                                                <div>Expires: {this.formatTimeLabel(entry.processing.expiresAt || "") || "-"}</div>
+                                                            </div>
+                                                        )}
                                                         {entry.history.length > 0 && (
                                                             <div class="ingress-operator-page__history" data-ingress-replay-history>
                                                                 <div class="ingress-operator-page__history-title">Replay History</div>

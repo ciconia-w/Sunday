@@ -320,6 +320,9 @@ try {
         operatorStateUsesStandaloneMode: initialOperatorState?.backgroundReplay?.mode === "standalone-service",
         operatorStateUsesExponentialStrategy: initialOperatorState?.backgroundReplay?.deliveryPolicy?.strategy === "exponential"
             && Number(initialOperatorState?.backgroundReplay?.deliveryPolicy?.multiplier ?? 0) >= 2,
+        operatorStateUsesSharedQueueOwnership: initialOperatorState?.backgroundReplay?.ownership?.replayQueuePersistence === "shared-runtime-store"
+            && initialOperatorState?.backgroundReplay?.ownership?.automaticReplayExecutor === "standalone-worker-direct"
+            && initialOperatorState?.backgroundReplay?.ownership?.serviceUsesSidecarOperatorApi === false,
         serviceManagedExternally: initialOperatorState?.backgroundReplay?.serviceStatus?.managedBySidecar === false
             && initialOperatorState?.backgroundReplay?.serviceStatus?.manager === "external",
         servicePidDiffersFromSidecar: Number(initialOperatorState?.backgroundReplay?.serviceStatus?.pid ?? 0) > 0
@@ -327,6 +330,10 @@ try {
         replayEntryCreated: replayEntry?.status === "pending",
         replayDelivered: deliveredEntry?.status === "delivered",
         replayUsedAutomaticPath: Number(deliveredEntry?.automaticReplayCount ?? 0) >= 1,
+        replayEntryLatestReceiptTracksStandaloneWorker: deliveredEntry?.latestReceipt?.ok === true
+            && deliveredEntry?.latestReceipt?.actor === "standalone-worker"
+            && deliveredEntry?.latestReceipt?.mode === "automatic",
+        replayEntryProcessingCleared: deliveredEntry?.processing == null,
         serviceRunning: serviceStatus?.running === true,
         statusFileTracksExternalManager: serviceStatusFile?.managedBySidecar === false
             && serviceStatusFile?.manager === "external",

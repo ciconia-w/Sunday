@@ -141,6 +141,7 @@ Date: 2026-06-03
   - `fixed` / `exponential` 两类 delivery policy
   - dedicated replay service heartbeat/status 落盘：`external-ingress-replay-service-status.json`
   - automatic replay pause/resume 状态落盘：`external-ingress-operator-control.json`
+  - replay queue / operator control / service status 现在统一落在 shared runtime store
   - sidecar operator API：
     - `get-reply-routes`
     - `get-replay-queue`
@@ -162,6 +163,9 @@ Date: 2026-06-03
     - `resumeIngressBackgroundReplay`
     - `resolveIngressQueueEntry`
   - replay queue entry 现在会在 operator state 中保留初始失败、自动/手动重试以及 resolve 的历史事件
+  - replay queue entry 现在也会暴露 `latestReceipt` 和 `processing`，operator UI 可直接看到最近回执和当前 claim owner
+  - dedicated / standalone replay worker 现在直接读取 shared replay queue，不再通过 sidecar operator API 轮询待重放项
+  - `IM Bridge` operator UI 现在会显式展示 queue ownership / route persistence / automatic replay executor
 - `browser control` 已具备默认关闭、按需启用、按需注册工具的基础能力
 - Qt host 的 `serviceConfig` 已补齐浏览器 / CLI / MCP 基本 runtime bridge
 - 浏览器运行时能力画像已下沉到 sidecar：`stableTabSwitch`、`stableScreenshotCapture`、`runtimeLimitNotice`、`knownIssues` 由 `browser-control.mjs` 统一给出，前端不再直接写死 OpenCLI 版本判断

@@ -571,6 +571,7 @@ export async function createRemoteInjectedChannels(baseUrl = "") {
                         counts: {
                             total: 0,
                             pending: 0,
+                            processing: 0,
                             delivered: 0,
                             awaitingOperator: 0,
                             resolved: 0,
@@ -614,6 +615,12 @@ export async function createRemoteInjectedChannels(baseUrl = "") {
                             pauseReason: "",
                             pausedAt: "",
                             updatedAt: "",
+                        },
+                        ownership: {
+                            routePersistence: "",
+                            replayQueuePersistence: "",
+                            automaticReplayExecutor: "",
+                            serviceUsesSidecarOperatorApi: false,
                         },
                     },
                     runtimeNote: "service-config unavailable",

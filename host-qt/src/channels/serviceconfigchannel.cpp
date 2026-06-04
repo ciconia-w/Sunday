@@ -72,6 +72,7 @@ QJsonObject defaultIngressOperatorState()
     QJsonObject replayCounts{
         {QStringLiteral("total"), 0},
         {QStringLiteral("pending"), 0},
+        {QStringLiteral("processing"), 0},
         {QStringLiteral("delivered"), 0},
         {QStringLiteral("awaitingOperator"), 0},
         {QStringLiteral("resolved"), 0},
@@ -122,6 +123,12 @@ QJsonObject defaultIngressOperatorState()
             {QStringLiteral("pausedAt"), QString()},
             {QStringLiteral("updatedAt"), QString()},
         }},
+        {QStringLiteral("ownership"), QJsonObject{
+            {QStringLiteral("routePersistence"), QString()},
+            {QStringLiteral("replayQueuePersistence"), QString()},
+            {QStringLiteral("automaticReplayExecutor"), QString()},
+            {QStringLiteral("serviceUsesSidecarOperatorApi"), false},
+        }},
     };
     QJsonObject replyRetryPolicy{
         {QStringLiteral("maxAttempts"), 1},
@@ -141,7 +148,7 @@ QJsonObject defaultIngressOperatorState()
         }},
         {QStringLiteral("replyRetryPolicy"), replyRetryPolicy},
         {QStringLiteral("backgroundReplay"), backgroundReplay},
-        {QStringLiteral("runtimeNote"), QStringLiteral("当前 background replay worker 仍运行在 sidecar 进程内；更强的 delivery reliability 仍需要 dedicated replay service。")},
+        {QStringLiteral("runtimeNote"), QStringLiteral("当前 background replay worker 仍运行在 sidecar 进程内，但 replay queue 已统一下沉到 shared runtime store。")},
     };
 }
 

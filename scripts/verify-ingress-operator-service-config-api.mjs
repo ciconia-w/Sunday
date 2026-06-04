@@ -303,17 +303,31 @@ try {
         initialPayload.backgroundReplay?.mode === "in-process" &&
         initialPayload.backgroundReplay?.deliveryPolicy?.strategy === "fixed" &&
         initialPayload.backgroundReplay?.serviceStatus?.enabled === false &&
+        initialPayload.backgroundReplay?.ownership?.replayQueuePersistence === "shared-runtime-store" &&
+        initialPayload.backgroundReplay?.ownership?.automaticReplayExecutor === "sidecar-direct" &&
+        initialPayload.backgroundReplay?.ownership?.serviceUsesSidecarOperatorApi === false &&
         typeof initialPayload.runtimeNote === "string" &&
         initialPayload.runtimeNote.includes("background replay") &&
+        initialPayload.replayQueue?.counts?.processing === 0 &&
         initialEntry?.status === "pending" &&
+        initialEntry?.latestReceipt?.ok === false &&
+        initialEntry?.latestReceipt?.actor === "sidecar" &&
+        initialEntry?.latestReceipt?.mode === "initial" &&
+        initialEntry?.processing == null &&
         replayActionResult?.status === 200 &&
         replayActionResult?.body?.ok === true &&
         replayPayload?.ok === true &&
         replayPayload?.entry?.status === "delivered" &&
         replayPayload?.automatic === false &&
+        replayPayload?.entry?.latestReceipt?.ok === true &&
+        replayPayload?.entry?.latestReceipt?.actor === "sidecar" &&
+        replayPayload?.entry?.latestReceipt?.mode === "manual" &&
+        replayPayload?.entry?.processing == null &&
         resolvedState?.status === 200 &&
         resolvedState?.body?.ok === true &&
         resolvedPayload?.status === "resolved" &&
+        resolvedPayload?.latestReceipt?.ok === true &&
+        resolvedPayload?.processing == null &&
         hiddenResolvedState?.status === 200 &&
         hiddenResolvedState?.body?.ok === true &&
         hiddenEntries.length === 0 &&

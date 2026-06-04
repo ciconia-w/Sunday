@@ -301,6 +301,9 @@ try {
         operatorStateUsesServiceMode: initialOperatorState?.backgroundReplay?.mode === "service",
         serviceReportedAsDedicated: initialOperatorState?.backgroundReplay?.hasDedicatedReplayService === true,
         operatorStateUsesFixedStrategy: initialOperatorState?.backgroundReplay?.deliveryPolicy?.strategy === "fixed",
+        operatorStateUsesSharedQueueOwnership: initialOperatorState?.backgroundReplay?.ownership?.replayQueuePersistence === "shared-runtime-store"
+            && initialOperatorState?.backgroundReplay?.ownership?.automaticReplayExecutor === "service-worker-direct"
+            && initialOperatorState?.backgroundReplay?.ownership?.serviceUsesSidecarOperatorApi === false,
         serviceManagedBySidecar: initialOperatorState?.backgroundReplay?.serviceStatus?.managedBySidecar === true
             && initialOperatorState?.backgroundReplay?.serviceStatus?.manager === "sidecar",
         servicePidDiffersFromSidecar: Number(initialOperatorState?.backgroundReplay?.serviceStatus?.pid ?? 0) > 0
@@ -308,6 +311,10 @@ try {
         serviceRunning: serviceStatus?.running === true,
         replayEntryDelivered: replayEntry?.status === "delivered",
         replayEntryWasAutoRetried: Number(replayEntry?.automaticReplayCount ?? 0) >= 1,
+        replayEntryLatestReceiptTracksServiceWorker: replayEntry?.latestReceipt?.ok === true
+            && replayEntry?.latestReceipt?.actor === "service-worker"
+            && replayEntry?.latestReceipt?.mode === "automatic",
+        replayEntryProcessingCleared: replayEntry?.processing == null,
         finalWebhookCallSucceeded: finalWebhookCall?.status === 200,
         finalWebhookCallContainsSlackText: finalWebhookCall?.body?.text === "ingress-replay-service-ok",
         statusFileTracksSidecarManager: serviceStatusFile?.managedBySidecar === true
