@@ -142,6 +142,7 @@ Date: 2026-06-03
   - dedicated replay service heartbeat/status 落盘：`external-ingress-replay-service-status.json`
   - automatic replay pause/resume 状态落盘：`external-ingress-operator-control.json`
   - replay queue / operator control / service status 现在统一落在 shared runtime store
+  - route persistence 现在也已纳入 shared runtime store contract，并通过 `routeMutationAuthority=sidecar-direct` 明确当前写入 authority
   - sidecar operator API：
     - `get-reply-routes`
     - `get-replay-queue`
@@ -164,6 +165,7 @@ Date: 2026-06-03
     - `resolveIngressQueueEntry`
   - replay queue entry 现在会在 operator state 中保留初始失败、自动/手动重试以及 resolve 的历史事件
   - replay queue entry 现在也会暴露 `latestReceipt` 和 `processing`，operator UI 可直接看到最近回执和当前 claim owner
+  - provider-specific receipt 现在开始结构化暴露 `providerCode` / `providerMessage` / `responseBodyPreview`，DingTalk / Lark 的应用层失败不会再被误看成单纯 HTTP 成功
   - dedicated / standalone replay worker 现在直接读取 shared replay queue，不再通过 sidecar operator API 轮询待重放项
   - `IM Bridge` operator UI 现在会显式展示 queue ownership / route persistence / automatic replay executor
 - `browser control` 已具备默认关闭、按需启用、按需注册工具的基础能力

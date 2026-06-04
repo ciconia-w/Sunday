@@ -19,6 +19,18 @@ function normalizeNonNegativeInteger(value, fallback) {
     return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
 }
 
+function normalizeProviderCode(value) {
+    if (typeof value === "string") {
+        return value.trim();
+    }
+
+    if (typeof value === "number" && Number.isFinite(value)) {
+        return String(value);
+    }
+
+    return "";
+}
+
 export function normalizeRetryDelays(value, fallback) {
     if (typeof value !== "string" || !value.trim()) {
         return fallback;
@@ -81,11 +93,96 @@ export function formatPlainTextReply(payload) {
 function createReplyDeliveryError(message, details = {}) {
     const error = new Error(message);
     error.statusCode = normalizeNonNegativeInteger(details.statusCode, 0);
+    error.statusText = typeof details.statusText === "string" ? details.statusText : "";
     error.transport = typeof details.transport === "string" ? details.transport : "";
+    error.providerCode = normalizeProviderCode(details.providerCode);
+    error.providerMessage = typeof details.providerMessage === "string" ? details.providerMessage : "";
+    error.responseBodyPreview = typeof details.responseBodyPreview === "string" ? details.responseBodyPreview : "";
     error.providerPayload = details.providerPayload && typeof details.providerPayload === "object"
         ? details.providerPayload
         : null;
     return error;
+}
+
+function createResponseBodyPreview(value) {
+    return typeof value === "string" ? value.trim().slice(0, 240) : "";
+}
+
+function tryParseJson(text) {
+    if (typeof text !== "string" || !text.trim()) {
+        return null;
+    }
+
+    try {
+        return JSON.parse(text);
+    } catch {
+        return null;
+    }
+}
+
+function extractProviderStatus(parsed) {
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+        return {
+            providerCode: "",
+            providerMessage: "",
+        };
+    }
+
+    const providerCode = Object.prototype.hasOwnProperty.call(parsed, "errcode")
+        ? normalizeProviderCode(parsed.errcode)
+        : normalizeProviderCode(parsed.code);
+
+    const providerMessage = typeof parsed.errmsg === "string"
+        ? parsed.errmsg.trim()
+        : typeof parsed.msg === "string"
+        ? parsed.msg.trim()
+        : typeof parsed.message === "string"
+        ? parsed.message.trim()
+        : "";
+
+    return {
+        providerCode,
+        providerMessage,
+    };
+}
+
+async function readResponseMetadata(response) {
+    const responseText = await response.text().catch(() => "");
+    const parsed = tryParseJson(responseText);
+    const providerStatus = extractProviderStatus(parsed);
+
+    return {
+        statusCode: response.status,
+        statusText: typeof response.statusText === "string" ? response.statusText : "",
+        responseBodyPreview: createResponseBodyPreview(responseText),
+        responseJson: parsed,
+        ...providerStatus,
+    };
+}
+
+function assertProviderResponseSuccess(label, replyTarget, providerPayload, metadata) {
+    const { providerCode, providerMessage } = metadata;
+    if (replyTarget.transport === "dingtalk-bot-webhook" && providerCode && providerCode !== "0") {
+        throw createReplyDeliveryError(
+            `${label} returned errcode ${providerCode}${providerMessage ? `: ${providerMessage}` : ""}`,
+            {
+                ...metadata,
+                transport: replyTarget.transport,
+                providerPayload,
+            },
+        );
+    }
+
+    if (replyTarget.transport === "lark-bot-webhook" && providerCode && providerCode !== "0") {
+        throw createReplyDeliveryError(
+            `${label} returned code ${providerCode}${providerMessage ? `: ${providerMessage}` : ""}`,
+            {
+                ...metadata,
+                transport: replyTarget.transport,
+                providerPayload,
+            },
+        );
+    }
 }
 
 function createLarkBotSignature(secret) {
@@ -165,10 +262,11 @@ async function postGenericWebhookReply(replyTarget, payload) {
         },
         body: JSON.stringify(payload),
     });
+    const metadata = await readResponseMetadata(response);
 
     if (!response.ok) {
         throw createReplyDeliveryError(`Reply webhook returned HTTP ${response.status}`, {
-            statusCode: response.status,
+            ...metadata,
             transport: replyTarget.transport,
             providerPayload: payload,
         });
@@ -178,6 +276,10 @@ async function postGenericWebhookReply(replyTarget, payload) {
         ok: true,
         transport: replyTarget.transport,
         status: response.status,
+        statusText: metadata.statusText,
+        providerCode: metadata.providerCode,
+        providerMessage: metadata.providerMessage,
+        responseBodyPreview: metadata.responseBodyPreview,
     };
 }
 
@@ -191,19 +293,25 @@ async function postLarkBotWebhookReply(replyTarget, payload) {
         },
         body: JSON.stringify(body),
     });
+    const metadata = await readResponseMetadata(response);
 
     if (!response.ok) {
         throw createReplyDeliveryError(`Lark bot webhook returned HTTP ${response.status}`, {
-            statusCode: response.status,
+            ...metadata,
             transport: replyTarget.transport,
             providerPayload: body,
         });
     }
+    assertProviderResponseSuccess("Lark bot webhook", replyTarget, body, metadata);
 
     return {
         ok: true,
         transport: replyTarget.transport,
         status: response.status,
+        statusText: metadata.statusText,
+        providerCode: metadata.providerCode,
+        providerMessage: metadata.providerMessage,
+        responseBodyPreview: metadata.responseBodyPreview,
         providerPayload: body,
     };
 }
@@ -218,10 +326,11 @@ async function postSlackWebhookReply(replyTarget, payload) {
         },
         body: JSON.stringify(body),
     });
+    const metadata = await readResponseMetadata(response);
 
     if (!response.ok) {
         throw createReplyDeliveryError(`Slack webhook returned HTTP ${response.status}`, {
-            statusCode: response.status,
+            ...metadata,
             transport: replyTarget.transport,
             providerPayload: body,
         });
@@ -231,6 +340,10 @@ async function postSlackWebhookReply(replyTarget, payload) {
         ok: true,
         transport: replyTarget.transport,
         status: response.status,
+        statusText: metadata.statusText,
+        providerCode: metadata.providerCode,
+        providerMessage: metadata.providerMessage,
+        responseBodyPreview: metadata.responseBodyPreview,
         providerPayload: body,
     };
 }
@@ -253,19 +366,25 @@ async function postDingtalkBotWebhookReply(replyTarget, payload) {
         },
         body: JSON.stringify(body),
     });
+    const metadata = await readResponseMetadata(response);
 
     if (!response.ok) {
         throw createReplyDeliveryError(`DingTalk bot webhook returned HTTP ${response.status}`, {
-            statusCode: response.status,
+            ...metadata,
             transport: replyTarget.transport,
             providerPayload: body,
         });
     }
+    assertProviderResponseSuccess("DingTalk bot webhook", replyTarget, body, metadata);
 
     return {
         ok: true,
         transport: replyTarget.transport,
         status: response.status,
+        statusText: metadata.statusText,
+        providerCode: metadata.providerCode,
+        providerMessage: metadata.providerMessage,
+        responseBodyPreview: metadata.responseBodyPreview,
         providerPayload: body,
     };
 }
@@ -280,10 +399,11 @@ async function postDiscordWebhookReply(replyTarget, payload) {
         },
         body: JSON.stringify(body),
     });
+    const metadata = await readResponseMetadata(response);
 
     if (!response.ok) {
         throw createReplyDeliveryError(`Discord webhook returned HTTP ${response.status}`, {
-            statusCode: response.status,
+            ...metadata,
             transport: replyTarget.transport,
             providerPayload: body,
         });
@@ -293,6 +413,10 @@ async function postDiscordWebhookReply(replyTarget, payload) {
         ok: true,
         transport: replyTarget.transport,
         status: response.status,
+        statusText: metadata.statusText,
+        providerCode: metadata.providerCode,
+        providerMessage: metadata.providerMessage,
+        responseBodyPreview: metadata.responseBodyPreview,
         providerPayload: body,
     };
 }
@@ -307,10 +431,11 @@ async function postTeamsWebhookReply(replyTarget, payload) {
         },
         body: JSON.stringify(body),
     });
+    const metadata = await readResponseMetadata(response);
 
     if (!response.ok) {
         throw createReplyDeliveryError(`Teams webhook returned HTTP ${response.status}`, {
-            statusCode: response.status,
+            ...metadata,
             transport: replyTarget.transport,
             providerPayload: body,
         });
@@ -320,6 +445,10 @@ async function postTeamsWebhookReply(replyTarget, payload) {
         ok: true,
         transport: replyTarget.transport,
         status: response.status,
+        statusText: metadata.statusText,
+        providerCode: metadata.providerCode,
+        providerMessage: metadata.providerMessage,
+        responseBodyPreview: metadata.responseBodyPreview,
         providerPayload: body,
     };
 }
@@ -375,8 +504,12 @@ export async function executeReplyDelivery(replyTarget, payload, options = {}) {
                     transport: result.transport ?? replyTarget.transport ?? "",
                     ok: true,
                     statusCode: result.status ?? 0,
+                    statusText: result.statusText ?? "",
                     at: new Date().toISOString(),
                     error: "",
+                    providerCode: result.providerCode ?? "",
+                    providerMessage: result.providerMessage ?? "",
+                    responseBodyPreview: result.responseBodyPreview ?? "",
                     providerPayload: result.providerPayload ?? null,
                 }),
             };
@@ -404,8 +537,12 @@ export async function executeReplyDelivery(replyTarget, payload, options = {}) {
                     transport: replyTarget.transport ?? "",
                     ok: false,
                     statusCode: normalizeNonNegativeInteger(error?.statusCode, 0),
+                    statusText: typeof error?.statusText === "string" ? error.statusText : "",
                     at: new Date().toISOString(),
                     error: errorMessage,
+                    providerCode: error?.providerCode ?? "",
+                    providerMessage: typeof error?.providerMessage === "string" ? error.providerMessage : "",
+                    responseBodyPreview: typeof error?.responseBodyPreview === "string" ? error.responseBodyPreview : "",
                     providerPayload: error?.providerPayload ?? null,
                 }),
             };
@@ -422,8 +559,12 @@ export async function executeReplyDelivery(replyTarget, payload, options = {}) {
             transport: replyTarget.transport ?? "",
             ok: false,
             statusCode: 0,
+            statusText: "",
             at: new Date().toISOString(),
             error: "Reply delivery failed",
+            providerCode: "",
+            providerMessage: "",
+            responseBodyPreview: "",
             providerPayload: null,
         }),
     };

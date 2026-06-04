@@ -618,6 +618,7 @@ export async function createRemoteInjectedChannels(baseUrl = "") {
                         },
                         ownership: {
                             routePersistence: "",
+                            routeMutationAuthority: "",
                             replayQueuePersistence: "",
                             automaticReplayExecutor: "",
                             serviceUsesSidecarOperatorApi: false,

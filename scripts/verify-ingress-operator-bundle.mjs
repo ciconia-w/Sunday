@@ -32,6 +32,9 @@ const markers = [
     "Route Persistence",
     "Worker Access",
     "Latest Receipt",
+    "Provider Code",
+    "Provider Message",
+    "Response Preview",
     "Processing",
     "Worker 状态",
     "治理状态",
@@ -54,6 +57,9 @@ const markers = [
     "data-ingress-replay-history",
     "data-ingress-replay-history-item",
     "data-ingress-replay-latest-receipt",
+    "data-ingress-replay-receipt-provider-code",
+    "data-ingress-replay-receipt-provider-message",
+    "data-ingress-replay-receipt-response-preview",
     "data-ingress-replay-processing",
 ];
 

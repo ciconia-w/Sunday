@@ -16,6 +16,30 @@ function normalizeString(value, fallback = "") {
     return typeof value === "string" ? value : fallback;
 }
 
+function normalizeStringRecord(value) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+        return {};
+    }
+
+    return Object.fromEntries(
+        Object.entries(value)
+            .filter(([key, item]) => typeof key === "string" && key.trim() && typeof item === "string")
+            .map(([key, item]) => [key.trim(), item]),
+    );
+}
+
+function normalizeProviderCode(value) {
+    if (typeof value === "string") {
+        return value.trim();
+    }
+
+    if (typeof value === "number" && Number.isFinite(value)) {
+        return String(value);
+    }
+
+    return "";
+}
+
 function createFutureIso(ms) {
     return new Date(Date.now() + Math.max(0, ms)).toISOString();
 }
@@ -145,6 +169,41 @@ export function sanitizeReplyTarget(replyTarget) {
     };
 }
 
+function normalizeStoredReplyTarget(value) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+        return null;
+    }
+
+    return {
+        transport: normalizeString(value.transport),
+        url: normalizeString(value.url),
+        headers: normalizeStringRecord(value.headers),
+        secret: normalizeString(value.secret),
+    };
+}
+
+export function normalizeReplyRouteRecord(entry) {
+    if (!entry || typeof entry !== "object") {
+        return null;
+    }
+
+    const routeKey = normalizeString(entry.routeKey).trim();
+    if (!routeKey) {
+        return null;
+    }
+
+    return {
+        routeKey,
+        source: normalizeString(entry.source),
+        channelId: normalizeString(entry.channelId),
+        threadId: normalizeString(entry.threadId),
+        conversationId: normalizeString(entry.conversationId),
+        sessionId: normalizeString(entry.sessionId),
+        replyTarget: normalizeStoredReplyTarget(entry.replyTarget),
+        updatedAt: normalizeString(entry.updatedAt),
+    };
+}
+
 function summarizeReplyPayload(payload) {
     const assistantText = typeof payload?.assistantText === "string" ? payload.assistantText.trim() : "";
     const errorText = typeof payload?.error === "string" ? payload.error.trim() : "";
@@ -167,8 +226,12 @@ export function normalizeDeliveryReceipt(value) {
         transport: normalizeString(value.transport),
         ok: value.ok === true,
         statusCode: normalizeNonNegativeInteger(value.statusCode, 0),
+        statusText: normalizeString(value.statusText),
         at: normalizeString(value.at),
         error: normalizeString(value.error),
+        providerCode: normalizeProviderCode(value.providerCode),
+        providerMessage: normalizeString(value.providerMessage),
+        responseBodyPreview: normalizeString(value.responseBodyPreview),
         providerPayloadPreview: normalizeString(value.providerPayloadPreview),
     };
 }
@@ -179,8 +242,12 @@ export function createDeliveryReceipt({
     transport,
     ok,
     statusCode,
+    statusText,
     at,
     error,
+    providerCode,
+    providerMessage,
+    responseBodyPreview,
     providerPayload,
 }) {
     const providerPayloadPreview = (() => {
@@ -201,8 +268,12 @@ export function createDeliveryReceipt({
         transport,
         ok,
         statusCode,
+        statusText,
         at,
         error,
+        providerCode,
+        providerMessage,
+        responseBodyPreview: normalizeString(responseBodyPreview).slice(0, 240),
         providerPayloadPreview,
     });
 }
@@ -291,6 +362,7 @@ export class IngressReplayStore {
     constructor(runtimeDir) {
         this.runtimeDir = runtimeDir;
         this.lockPath = resolve(runtimeDir, "external-ingress-replay-store.lock");
+        this.routeStorePath = resolve(runtimeDir, "external-ingress-routes.json");
         this.replayQueuePath = resolve(runtimeDir, "external-ingress-replay-queue.json");
         this.backgroundReplayControlPath = resolve(runtimeDir, "external-ingress-operator-control.json");
         this.deadLetterPath = resolve(runtimeDir, "external-ingress-dead-letters.json");
@@ -334,6 +406,14 @@ export class IngressReplayStore {
             .map((entry) => normalizeReplayQueueEntryRecord(entry));
     }
 
+    async loadReplyRouteEntries() {
+        const parsed = await readJson(this.routeStorePath, { routes: [] });
+        const routes = Array.isArray(parsed?.routes) ? parsed.routes : [];
+        return routes
+            .map((entry) => normalizeReplyRouteRecord(entry))
+            .filter(Boolean);
+    }
+
     async saveReplayQueueEntries(entries) {
         const normalizedEntries = (Array.isArray(entries) ? entries : [])
             .map((entry) => normalizeReplayQueueEntryRecord(entry))
@@ -341,9 +421,22 @@ export class IngressReplayStore {
         await writeJsonAtomic(this.replayQueuePath, { entries: normalizedEntries });
     }
 
+    async saveReplyRouteEntries(entries) {
+        const normalizedEntries = (Array.isArray(entries) ? entries : [])
+            .map((entry) => normalizeReplyRouteRecord(entry))
+            .filter(Boolean)
+            .sort((left, right) => String(left.routeKey ?? "").localeCompare(String(right.routeKey ?? "")));
+        await writeJsonAtomic(this.routeStorePath, { routes: normalizedEntries });
+    }
+
     async getReplayQueueMap() {
         const entries = await this.loadReplayQueueEntries();
         return new Map(entries.map((entry) => [entry.id, entry]));
+    }
+
+    async getReplyRouteMap() {
+        const entries = await this.loadReplyRouteEntries();
+        return new Map(entries.map((entry) => [entry.routeKey, entry]));
     }
 
     async listReplayQueueEntries() {
@@ -366,6 +459,19 @@ export class IngressReplayStore {
             const normalizedEntry = normalizeReplayQueueEntryRecord(entry);
             replayQueueMap.set(normalizedEntry.id, normalizedEntry);
             await this.saveReplayQueueEntries([...replayQueueMap.values()]);
+            return normalizedEntry;
+        });
+    }
+
+    async upsertReplyRoute(entry) {
+        return this.withLock(async () => {
+            const routeMap = await this.getReplyRouteMap();
+            const normalizedEntry = normalizeReplyRouteRecord(entry);
+            if (!normalizedEntry) {
+                throw new Error("Reply route record is invalid");
+            }
+            routeMap.set(normalizedEntry.routeKey, normalizedEntry);
+            await this.saveReplyRouteEntries([...routeMap.values()]);
             return normalizedEntry;
         });
     }

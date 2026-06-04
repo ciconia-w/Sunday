@@ -125,6 +125,7 @@ QJsonObject defaultIngressOperatorState()
         }},
         {QStringLiteral("ownership"), QJsonObject{
             {QStringLiteral("routePersistence"), QString()},
+            {QStringLiteral("routeMutationAuthority"), QString()},
             {QStringLiteral("replayQueuePersistence"), QString()},
             {QStringLiteral("automaticReplayExecutor"), QString()},
             {QStringLiteral("serviceUsesSidecarOperatorApi"), false},

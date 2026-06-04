@@ -302,6 +302,8 @@ try {
         initialPayload.supportedReplyTransports.includes("discord-webhook") &&
         initialPayload.backgroundReplay?.mode === "in-process" &&
         initialPayload.backgroundReplay?.deliveryPolicy?.strategy === "fixed" &&
+        initialPayload.backgroundReplay?.ownership?.routePersistence === "shared-runtime-store" &&
+        initialPayload.backgroundReplay?.ownership?.routeMutationAuthority === "sidecar-direct" &&
         initialPayload.backgroundReplay?.serviceStatus?.enabled === false &&
         initialPayload.backgroundReplay?.ownership?.replayQueuePersistence === "shared-runtime-store" &&
         initialPayload.backgroundReplay?.ownership?.automaticReplayExecutor === "sidecar-direct" &&
@@ -313,6 +315,8 @@ try {
         initialEntry?.latestReceipt?.ok === false &&
         initialEntry?.latestReceipt?.actor === "sidecar" &&
         initialEntry?.latestReceipt?.mode === "initial" &&
+        initialEntry?.latestReceipt?.statusText === "Internal Server Error" &&
+        initialEntry?.latestReceipt?.responseBodyPreview === "error" &&
         initialEntry?.processing == null &&
         replayActionResult?.status === 200 &&
         replayActionResult?.body?.ok === true &&
@@ -322,6 +326,8 @@ try {
         replayPayload?.entry?.latestReceipt?.ok === true &&
         replayPayload?.entry?.latestReceipt?.actor === "sidecar" &&
         replayPayload?.entry?.latestReceipt?.mode === "manual" &&
+        replayPayload?.entry?.latestReceipt?.statusText === "OK" &&
+        replayPayload?.entry?.latestReceipt?.responseBodyPreview === "ok" &&
         replayPayload?.entry?.processing == null &&
         resolvedState?.status === 200 &&
         resolvedState?.body?.ok === true &&

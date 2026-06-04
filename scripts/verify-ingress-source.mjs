@@ -33,8 +33,10 @@ const checks = {
     followupLinksToConversationTail: externalIngressSource.includes("getConversationTailMessageId"),
     ingressPersistsConversationRoot: externalIngressSource.includes("saveConversation(payload.conversation_id)"),
     ingressStoresReplyWebhookRoute: externalIngressSource.includes("replyWebhookUrl")
-        && externalIngressSource.includes("routeStorePath")
-        && externalIngressSource.includes("saveRouteTargets"),
+        && externalIngressSource.includes("rememberReplyTarget")
+        && ingressReplayStoreSource.includes("routeStorePath")
+        && ingressReplayStoreSource.includes("saveReplyRouteEntries")
+        && ingressReplayStoreSource.includes("upsertReplyRoute"),
     ingressSupportsLarkWebhookTransport: ingressReplyDeliverySource.includes("lark-bot-webhook")
         && ingressReplyDeliverySource.includes("createHmac")
         && ingressReplyDeliverySource.includes("buildLarkBotReplyBody"),
@@ -68,6 +70,11 @@ const checks = {
         && ingressReplayStoreSource.includes("processing")
         && ingressReplayStoreSource.includes("createDeliveryReceipt")
         && ingressReplayStoreSource.includes("createReplayProcessingClaim"),
+    ingressCapturesProviderSpecificReceipts: ingressReplyDeliverySource.includes("providerCode")
+        && ingressReplyDeliverySource.includes("providerMessage")
+        && ingressReplyDeliverySource.includes("responseBodyPreview")
+        && ingressReplyDeliverySource.includes("errcode")
+        && externalIngressSource.includes("routeMutationAuthority"),
     ingressRunsBackgroundReplayWorker: externalIngressSource.includes("backgroundReplayEnabled")
         && externalIngressSource.includes("backgroundReplayDelaysMs")
         && externalIngressSource.includes("startBackgroundReplayLoop")
@@ -131,6 +138,11 @@ const checks = {
         && ingressDocSource.includes("直接读取 shared replay queue")
         && ingressDocSource.includes("latestReceipt")
         && ingressDocSource.includes("processing"),
+    docExplainsSharedRouteOwnershipAndProviderReceipts: ingressDocSource.includes("route ownership")
+        && ingressDocSource.includes("routeMutationAuthority")
+        && ingressDocSource.includes("providerCode")
+        && ingressDocSource.includes("providerMessage")
+        && ingressDocSource.includes("responseBodyPreview"),
     docExplainsReplayOperatorSurface: ingressDocSource.includes("external-ingress-replay-queue.json")
         && ingressDocSource.includes("/ingress/get-replay-queue")
         && ingressDocSource.includes("/ingress/replay-queue/replay")

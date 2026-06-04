@@ -320,6 +320,8 @@ try {
         operatorStateUsesStandaloneMode: initialOperatorState?.backgroundReplay?.mode === "standalone-service",
         operatorStateUsesExponentialStrategy: initialOperatorState?.backgroundReplay?.deliveryPolicy?.strategy === "exponential"
             && Number(initialOperatorState?.backgroundReplay?.deliveryPolicy?.multiplier ?? 0) >= 2,
+        operatorStateUsesSharedRouteOwnership: initialOperatorState?.backgroundReplay?.ownership?.routePersistence === "shared-runtime-store"
+            && initialOperatorState?.backgroundReplay?.ownership?.routeMutationAuthority === "sidecar-direct",
         operatorStateUsesSharedQueueOwnership: initialOperatorState?.backgroundReplay?.ownership?.replayQueuePersistence === "shared-runtime-store"
             && initialOperatorState?.backgroundReplay?.ownership?.automaticReplayExecutor === "standalone-worker-direct"
             && initialOperatorState?.backgroundReplay?.ownership?.serviceUsesSidecarOperatorApi === false,
