@@ -789,6 +789,14 @@ const server = createServer(async (_req, res) => {
                             errorHint: screenshotFailure.errorHint,
                         };
                     }
+                } else if (_req.url === "/service-config/get-ingress-operator-state") {
+                    result = await externalIngress.getOperatorState({
+                        includeResolved: body.includeResolved === true,
+                    });
+                } else if (_req.url === "/service-config/replay-ingress-queue-entry") {
+                    result = await externalIngress.replayQueuedReply(body.id ?? "");
+                } else if (_req.url === "/service-config/resolve-ingress-queue-entry") {
+                    result = await externalIngress.resolveReplayQueueEntry(body.id ?? "", body.resolution ?? "");
                 } else if (_req.url === "/service-config/get-mcp-third-party-agreement") {
                     result = await mcpRegistry.getThirdPartyAgreement();
                 } else if (_req.url === "/service-config/set-mcp-third-party-agreement") {

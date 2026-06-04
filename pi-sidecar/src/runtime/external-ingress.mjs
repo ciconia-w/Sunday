@@ -172,6 +172,10 @@ function formatPlainTextReply(payload) {
     return `Sunday 处理失败：${errorText}`;
 }
 
+function buildSupportedReplyTransports() {
+    return ["webhook", "lark-bot-webhook", "slack-webhook"];
+}
+
 function wait(ms) {
     return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -395,6 +399,30 @@ export class ExternalIngress {
             },
             counts,
             entries,
+        };
+    }
+
+    async getOperatorState(options = {}) {
+        const routes = await this.listReplyRoutes();
+        const replayQueue = await this.getReplayQueue(options);
+
+        return {
+            routes,
+            replayQueue,
+            supportedReplyTransports: buildSupportedReplyTransports(),
+            replyRetryPolicy: {
+                maxAttempts: this.replyRetryDelaysMs.length + 1,
+                delaysMs: [...this.replyRetryDelaysMs],
+            },
+            backgroundReplay: {
+                enabled: this.backgroundReplayEnabled,
+                pollMs: this.backgroundReplayPollMs,
+                delaysMs: [...this.backgroundReplayDelaysMs],
+                mode: "in-process",
+                hasDedicatedReplayService: false,
+            },
+            runtimeNote:
+                "当前 background replay worker 仍运行在 sidecar 进程内；更强的 delivery reliability 仍需要 dedicated replay service。",
         };
     }
 

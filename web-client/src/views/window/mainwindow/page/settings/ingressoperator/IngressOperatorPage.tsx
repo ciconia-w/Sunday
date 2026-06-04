@@ -1,0 +1,557 @@
+import { computed, defineComponent, onMounted, ref } from "vue";
+import ScrollBar from "@/components/ScrollBar";
+import Switch from "@/components/Switch";
+import TextButton from "@/components/TextButton";
+import { useBackendStore, useNotifyStore } from "@/stores";
+import "@/assets/styles/window/mainwindow/page/settings/skills/SkillsPage.css";
+import "@/assets/styles/window/mainwindow/page/settings/ingressoperator/IngressOperatorPage.css";
+
+interface IngressReplyTargetSummary {
+    transport?: string;
+    url?: string;
+    hasSecret?: boolean;
+    headerKeys?: string[];
+}
+
+interface IngressReplyRouteSummary {
+    routeKey: string;
+    source: string;
+    channelId: string;
+    threadId: string;
+    conversationId: string;
+    sessionId: string;
+    replyTarget?: IngressReplyTargetSummary;
+    updatedAt: string;
+}
+
+interface IngressReplayPayloadSummary {
+    ok?: boolean;
+    assistantTextPreview?: string;
+    errorPreview?: string;
+}
+
+interface IngressReplayQueueEntry {
+    id: string;
+    status: string;
+    transport: string;
+    routeKey: string;
+    conversationId: string;
+    sessionId: string;
+    requestExternalMessageId: string;
+    replyTarget?: IngressReplyTargetSummary;
+    payloadSummary?: IngressReplayPayloadSummary;
+    attemptCount: number;
+    replayCount: number;
+    automaticReplayCount: number;
+    latestError: string;
+    createdAt: string;
+    updatedAt: string;
+    deliveredAt: string;
+    resolvedAt: string;
+    nextAttemptAt: string;
+    lastAttemptAt: string;
+}
+
+interface IngressReplayQueueState {
+    worker: {
+        enabled: boolean;
+        pollMs: number;
+        delaysMs: number[];
+    };
+    counts: {
+        total: number;
+        pending: number;
+        delivered: number;
+        awaitingOperator: number;
+        resolved: number;
+        discarded: number;
+    };
+    entries: IngressReplayQueueEntry[];
+}
+
+interface IngressOperatorState {
+    routes: IngressReplyRouteSummary[];
+    replayQueue: IngressReplayQueueState;
+    supportedReplyTransports: string[];
+    replyRetryPolicy: {
+        maxAttempts: number;
+        delaysMs: number[];
+    };
+    backgroundReplay: {
+        enabled: boolean;
+        pollMs: number;
+        delaysMs: number[];
+        mode: string;
+        hasDedicatedReplayService: boolean;
+    };
+    runtimeNote: string;
+}
+
+const createDefaultOperatorState = (): IngressOperatorState => ({
+    routes: [],
+    replayQueue: {
+        worker: {
+            enabled: false,
+            pollMs: 5000,
+            delaysMs: [],
+        },
+        counts: {
+            total: 0,
+            pending: 0,
+            delivered: 0,
+            awaitingOperator: 0,
+            resolved: 0,
+            discarded: 0,
+        },
+        entries: [],
+    },
+    supportedReplyTransports: ["webhook", "lark-bot-webhook", "slack-webhook"],
+    replyRetryPolicy: {
+        maxAttempts: 1,
+        delaysMs: [],
+    },
+    backgroundReplay: {
+        enabled: false,
+        pollMs: 5000,
+        delaysMs: [],
+        mode: "in-process",
+        hasDedicatedReplayService: false,
+    },
+    runtimeNote: "当前没有可用的 ingress operator 状态。",
+});
+
+function formatTimeLabel(value: string) {
+    if (!value) {
+        return "";
+    }
+
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleString();
+}
+
+function formatDelayList(delaysMs: number[]) {
+    if (!Array.isArray(delaysMs) || !delaysMs.length) {
+        return "无";
+    }
+
+    return delaysMs.map((delay) => `${Math.max(0, Math.round(delay / 1000))}s`).join(" / ");
+}
+
+function normalizeTransportLabel(transport: string) {
+    if (transport === "lark-bot-webhook") {
+        return "Lark / Feishu";
+    }
+
+    if (transport === "slack-webhook") {
+        return "Slack";
+    }
+
+    if (transport === "webhook") {
+        return "Generic Webhook";
+    }
+
+    return transport || "unknown";
+}
+
+export default defineComponent({
+    name: "IngressOperatorPage",
+    components: {
+        ScrollBar,
+        Switch,
+        TextButton,
+    },
+    setup() {
+        const backendStore = useBackendStore();
+        const notifyStore = useNotifyStore();
+
+        const operatorState = ref<IngressOperatorState>(createDefaultOperatorState());
+        const isLoading = ref(false);
+        const lastError = ref("");
+        const includeResolved = ref(false);
+        const pendingActionIds = ref<Record<string, string>>({});
+
+        const loadOperatorState = async (showToast = false) => {
+            isLoading.value = true;
+            lastError.value = "";
+            try {
+                const state = await backendStore.requestServiceConfig(
+                    "getIngressOperatorState",
+                    includeResolved.value,
+                ) as Partial<IngressOperatorState> | null;
+                operatorState.value = {
+                    ...createDefaultOperatorState(),
+                    ...(state || {}),
+                    replayQueue: {
+                        ...createDefaultOperatorState().replayQueue,
+                        ...(state?.replayQueue || {}),
+                        worker: {
+                            ...createDefaultOperatorState().replayQueue.worker,
+                            ...(state?.replayQueue?.worker || {}),
+                        },
+                        counts: {
+                            ...createDefaultOperatorState().replayQueue.counts,
+                            ...(state?.replayQueue?.counts || {}),
+                        },
+                        entries: Array.isArray(state?.replayQueue?.entries) ? state.replayQueue.entries : [],
+                    },
+                    routes: Array.isArray(state?.routes) ? state.routes : [],
+                    supportedReplyTransports: Array.isArray(state?.supportedReplyTransports)
+                        ? state.supportedReplyTransports
+                        : createDefaultOperatorState().supportedReplyTransports,
+                };
+
+                if (showToast) {
+                    notifyStore.showToast({
+                        type: "success",
+                        message: backendStore.translate("IM Bridge 状态已刷新"),
+                        duration: 1800,
+                    });
+                }
+            } catch (error) {
+                lastError.value = error instanceof Error ? error.message : "加载 IM Bridge 状态失败。";
+                if (showToast) {
+                    notifyStore.showToast({
+                        type: "error",
+                        message: lastError.value,
+                        duration: 2600,
+                    });
+                }
+            } finally {
+                isLoading.value = false;
+            }
+        };
+
+        const withEntryAction = async (entryId: string, actionKey: string, handler: () => Promise<void>) => {
+            pendingActionIds.value = {
+                ...pendingActionIds.value,
+                [entryId]: actionKey,
+            };
+            try {
+                await handler();
+            } finally {
+                const nextPending = {
+                    ...pendingActionIds.value,
+                };
+                delete nextPending[entryId];
+                pendingActionIds.value = nextPending;
+            }
+        };
+
+        const handleReplayEntry = async (entryId: string) => {
+            await withEntryAction(entryId, "replay", async () => {
+                const result = await backendStore.requestServiceConfig("replayIngressQueueEntry", entryId) as {
+                    ok?: boolean;
+                    error?: string;
+                    automatic?: boolean;
+                } | null;
+                if (result?.ok === true) {
+                    notifyStore.showToast({
+                        type: "success",
+                        message: backendStore.translate("已触发重试"),
+                        duration: 1800,
+                    });
+                } else {
+                    notifyStore.showToast({
+                        type: "error",
+                        message: result?.error || backendStore.translate("重试失败，请稍后再试。"),
+                        duration: 2600,
+                    });
+                }
+                await loadOperatorState(false);
+            });
+        };
+
+        const handleResolveEntry = async (entryId: string, resolution: "resolved" | "discarded") => {
+            await withEntryAction(entryId, resolution, async () => {
+                await backendStore.requestServiceConfig("resolveIngressQueueEntry", entryId, resolution);
+                notifyStore.showToast({
+                    type: "success",
+                    message: resolution === "discarded"
+                        ? backendStore.translate("该回推项已标记为忽略")
+                        : backendStore.translate("该回推项已标记为已处理"),
+                    duration: 1800,
+                });
+                await loadOperatorState(false);
+            });
+        };
+
+        onMounted(() => {
+            void loadOperatorState(false);
+        });
+
+        const headerTitleText = computed(() => "IM Bridge");
+        const headerSubtitleText = computed(() => "查看 reply route、replay queue 和当前 delivery policy。");
+        const refreshButtonText = computed(() => isLoading.value ? "刷新中..." : "刷新状态");
+        const workerModeText = computed(() =>
+            operatorState.value.backgroundReplay.hasDedicatedReplayService
+                ? "Dedicated Replay Service"
+                : "Sidecar In-Process Worker",
+        );
+        const supportedTransportText = computed(() =>
+            operatorState.value.supportedReplyTransports.map(normalizeTransportLabel).join(" / "),
+        );
+        const summaryBadges = computed(() => [
+            {
+                key: "routes",
+                label: "Reply Routes",
+                value: String(operatorState.value.routes.length),
+            },
+            {
+                key: "pending",
+                label: "Pending",
+                value: String(operatorState.value.replayQueue.counts.pending),
+            },
+            {
+                key: "awaiting",
+                label: "Awaiting Operator",
+                value: String(operatorState.value.replayQueue.counts.awaitingOperator),
+            },
+            {
+                key: "delivered",
+                label: "Delivered",
+                value: String(operatorState.value.replayQueue.counts.delivered),
+            },
+            {
+                key: "resolved",
+                label: "Resolved",
+                value: String(operatorState.value.replayQueue.counts.resolved + operatorState.value.replayQueue.counts.discarded),
+            },
+        ]);
+
+        const canReplayEntry = (entry: IngressReplayQueueEntry) => {
+            return ["pending", "awaiting-operator"].includes(entry.status);
+        };
+
+        const canResolveEntry = (entry: IngressReplayQueueEntry) => {
+            return !["resolved", "discarded"].includes(entry.status);
+        };
+
+        const isActionPending = (entryId: string, actionKey: string) => {
+            return pendingActionIds.value[entryId] === actionKey;
+        };
+
+        const statusToneClass = (status: string) => {
+            if (status === "delivered" || status === "resolved") {
+                return "ingress-operator-page__badge--success";
+            }
+            if (status === "pending" || status === "awaiting-operator") {
+                return "ingress-operator-page__badge--warning";
+            }
+            if (status === "discarded") {
+                return "ingress-operator-page__badge--neutral";
+            }
+            return "ingress-operator-page__badge--error";
+        };
+
+        return {
+            backendStore,
+            operatorState,
+            isLoading,
+            lastError,
+            includeResolved,
+            headerTitleText,
+            headerSubtitleText,
+            refreshButtonText,
+            workerModeText,
+            supportedTransportText,
+            summaryBadges,
+            canReplayEntry,
+            canResolveEntry,
+            isActionPending,
+            statusToneClass,
+            formatTimeLabel,
+            formatDelayList,
+            normalizeTransportLabel,
+            loadOperatorState,
+            handleReplayEntry,
+            handleResolveEntry,
+        };
+    },
+    render() {
+        return (
+            <div class={["skills-page", "ingress-operator-page"]} data-ingress-operator-page>
+                <div class="skills-page__header-container">
+                    <div class="skills-page__container">
+                        <div class="skills-page__header">
+                            <div class="skills-page__header-left">
+                                <div class="skills-page__header-content">
+                                    <div class="skills-page__title">{this.headerTitleText}</div>
+                                    <div class="skills-page__subtitle">{this.headerSubtitleText}</div>
+                                </div>
+                            </div>
+                            <div class="skills-page__actions">
+                                <div class="ingress-operator-page__toggle">
+                                    <span class="ingress-operator-page__toggle-label">显示已处理</span>
+                                    <Switch
+                                        value={this.includeResolved}
+                                        onChange={(value: boolean) => {
+                                            this.includeResolved = value;
+                                            void this.loadOperatorState(false);
+                                        }}
+                                    />
+                                </div>
+                                <TextButton text={this.refreshButtonText} onClick={() => void this.loadOperatorState(true)} />
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="skills-page__content">
+                    <ScrollBar class="skills-page__scroll">
+                        <div class="skills-page__content-container">
+                            <div class="skills-page__container">
+                                <div class="skills-page__section ingress-operator-page__stack">
+                                    <div class="ingress-operator-page__summary-grid" data-ingress-summary>
+                                        {this.summaryBadges.map((badge) => (
+                                            <div class="ingress-operator-page__summary-card" key={badge.key}>
+                                                <div class="ingress-operator-page__summary-label">{badge.label}</div>
+                                                <div class="ingress-operator-page__summary-value">{badge.value}</div>
+                                            </div>
+                                        ))}
+                                    </div>
+
+                                    <div class="ingress-operator-page__panel">
+                                        <div class="ingress-operator-page__panel-header">
+                                            <div class="ingress-operator-page__panel-title">Delivery Policy</div>
+                                            <div class={["ingress-operator-page__badge", this.operatorState.backgroundReplay.enabled ? "ingress-operator-page__badge--success" : "ingress-operator-page__badge--neutral"]}>
+                                                {this.operatorState.backgroundReplay.enabled ? "Worker 已启用" : "Worker 已关闭"}
+                                            </div>
+                                        </div>
+                                        <div class="ingress-operator-page__fact-grid">
+                                            <div class="ingress-operator-page__fact-item">
+                                                <div class="ingress-operator-page__fact-label">当前模式</div>
+                                                <div class="ingress-operator-page__fact-value">{this.workerModeText}</div>
+                                            </div>
+                                            <div class="ingress-operator-page__fact-item">
+                                                <div class="ingress-operator-page__fact-label">支持回推</div>
+                                                <div class="ingress-operator-page__fact-value">{this.supportedTransportText}</div>
+                                            </div>
+                                            <div class="ingress-operator-page__fact-item">
+                                                <div class="ingress-operator-page__fact-label">同步重试</div>
+                                                <div class="ingress-operator-page__fact-value">
+                                                    {this.operatorState.replyRetryPolicy.maxAttempts} 次 / {this.formatDelayList(this.operatorState.replyRetryPolicy.delaysMs)}
+                                                </div>
+                                            </div>
+                                            <div class="ingress-operator-page__fact-item">
+                                                <div class="ingress-operator-page__fact-label">后台重放</div>
+                                                <div class="ingress-operator-page__fact-value">
+                                                    {this.operatorState.backgroundReplay.enabled
+                                                        ? `${this.formatDelayList(this.operatorState.backgroundReplay.delaysMs)} / ${Math.max(1, Math.round(this.operatorState.backgroundReplay.pollMs / 1000))}s 轮询`
+                                                        : "未启用"}
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="ingress-operator-page__note" data-ingress-operator-runtime-note>
+                                            {this.operatorState.runtimeNote}
+                                        </div>
+                                        {this.lastError && (
+                                            <div class="ingress-operator-page__error">{this.lastError}</div>
+                                        )}
+                                    </div>
+
+                                    <div class="ingress-operator-page__panel">
+                                        <div class="ingress-operator-page__panel-header">
+                                            <div class="ingress-operator-page__panel-title">Reply Routes</div>
+                                            <div class="ingress-operator-page__panel-subtitle">当前按 source / channel / thread 持久化的回推目标。</div>
+                                        </div>
+                                        {this.operatorState.routes.length > 0 ? (
+                                            <div class="ingress-operator-page__list">
+                                                {this.operatorState.routes.map((route) => (
+                                                    <div class="ingress-operator-page__list-row" key={route.routeKey} data-ingress-route-row>
+                                                        <div class="ingress-operator-page__row-topline">
+                                                            <div class="ingress-operator-page__row-title">{route.routeKey}</div>
+                                                            <div class={["ingress-operator-page__badge", "ingress-operator-page__badge--neutral"]}>
+                                                                {this.normalizeTransportLabel(route.replyTarget?.transport || "")}
+                                                            </div>
+                                                        </div>
+                                                        <div class="ingress-operator-page__row-meta">
+                                                            <span>{route.source}</span>
+                                                            <span>{route.channelId}</span>
+                                                            <span>{route.threadId}</span>
+                                                        </div>
+                                                        <div class="ingress-operator-page__row-detail">
+                                                            <div>Target: {route.replyTarget?.url || "未配置"}</div>
+                                                            <div>Conversation: {route.conversationId || "-"}</div>
+                                                            <div>Session: {route.sessionId || "-"}</div>
+                                                            <div>最后更新: {this.formatTimeLabel(route.updatedAt) || "-"}</div>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        ) : (
+                                            <div class="ingress-operator-page__empty">当前没有持久化的 reply route。</div>
+                                        )}
+                                    </div>
+
+                                    <div class="ingress-operator-page__panel">
+                                        <div class="ingress-operator-page__panel-header">
+                                            <div class="ingress-operator-page__panel-title">Replay Queue</div>
+                                            <div class="ingress-operator-page__panel-subtitle">查看待重放项，并直接执行重试、已处理或忽略。</div>
+                                        </div>
+                                        {this.operatorState.replayQueue.entries.length > 0 ? (
+                                            <div class="ingress-operator-page__list">
+                                                {this.operatorState.replayQueue.entries.map((entry) => (
+                                                    <div class="ingress-operator-page__list-row" key={entry.id} data-ingress-replay-row>
+                                                        <div class="ingress-operator-page__row-topline">
+                                                            <div class="ingress-operator-page__row-title">{entry.routeKey || entry.id}</div>
+                                                            <div class={["ingress-operator-page__badge", this.statusToneClass(entry.status)]}>
+                                                                {entry.status}
+                                                            </div>
+                                                        </div>
+                                                        <div class="ingress-operator-page__row-meta">
+                                                            <span>{this.normalizeTransportLabel(entry.transport)}</span>
+                                                            <span>{entry.requestExternalMessageId || "no external message id"}</span>
+                                                        </div>
+                                                        <div class="ingress-operator-page__row-preview">
+                                                            {entry.payloadSummary?.ok
+                                                                ? (entry.payloadSummary?.assistantTextPreview || "无文本预览")
+                                                                : (entry.payloadSummary?.errorPreview || entry.latestError || "无错误摘要")}
+                                                        </div>
+                                                        <div class="ingress-operator-page__row-detail">
+                                                            <div>Attempt: {entry.attemptCount} / Manual: {entry.replayCount} / Auto: {entry.automaticReplayCount}</div>
+                                                            <div>Next Attempt: {this.formatTimeLabel(entry.nextAttemptAt) || "-"}</div>
+                                                            <div>Last Attempt: {this.formatTimeLabel(entry.lastAttemptAt) || "-"}</div>
+                                                            <div>Updated: {this.formatTimeLabel(entry.updatedAt) || "-"}</div>
+                                                            {entry.latestError ? <div>Latest Error: {entry.latestError}</div> : null}
+                                                        </div>
+                                                        {(this.canReplayEntry(entry) || this.canResolveEntry(entry)) && (
+                                                            <div class="ingress-operator-page__row-actions">
+                                                                {this.canReplayEntry(entry) && (
+                                                                    <TextButton
+                                                                        text={this.isActionPending(entry.id, "replay") ? "重试中..." : "立即重试"}
+                                                                        disabled={this.isActionPending(entry.id, "replay")}
+                                                                        onClick={() => void this.handleReplayEntry(entry.id)}
+                                                                    />
+                                                                )}
+                                                                {this.canResolveEntry(entry) && (
+                                                                    <TextButton
+                                                                        text={this.isActionPending(entry.id, "resolved") ? "处理中..." : "标记已处理"}
+                                                                        disabled={this.isActionPending(entry.id, "resolved")}
+                                                                        onClick={() => void this.handleResolveEntry(entry.id, "resolved")}
+                                                                    />
+                                                                )}
+                                                                {this.canResolveEntry(entry) && (
+                                                                    <TextButton
+                                                                        text={this.isActionPending(entry.id, "discarded") ? "处理中..." : "忽略"}
+                                                                        disabled={this.isActionPending(entry.id, "discarded")}
+                                                                        onClick={() => void this.handleResolveEntry(entry.id, "discarded")}
+                                                                    />
+                                                                )}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        ) : (
+                                            <div class="ingress-operator-page__empty">当前没有需要处理的 replay queue 项。</div>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </ScrollBar>
+                </div>
+            </div>
+        );
+    },
+});

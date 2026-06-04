@@ -7,6 +7,7 @@ export const MAIN_WINDOW_WORKSPACE_PAGES = {
     MCP_SERVICES: "mcpServices",
     SKILLS: "skills",
     CLI_TOOLS: "cliTools",
+    INGRESS_OPERATOR: "ingressOperator",
     BROWSER_PANEL: "browserPanel",
     DIGITAL_HUMAN: "digitalHuman",
 } as const;

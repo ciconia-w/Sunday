@@ -17,6 +17,7 @@ const EXTENSIONS_WORKSPACE_TABS = new Set<MainWindowWorkspacePage>([
     MAIN_WINDOW_WORKSPACE_PAGES.SKILLS,
     MAIN_WINDOW_WORKSPACE_PAGES.CLI_TOOLS,
     MAIN_WINDOW_WORKSPACE_PAGES.MCP_SERVICES,
+    MAIN_WINDOW_WORKSPACE_PAGES.INGRESS_OPERATOR,
 ]);
 
 export const useMainWindowStore = defineStore("mainwindow", {
@@ -191,9 +192,11 @@ export const useMainWindowStore = defineStore("mainwindow", {
             return this.setWorkspacePage(page);
         },
 
-        openExtensionsPage(tab: MainWindowWorkspacePage = this.extensionsActiveTab) {
-            if (EXTENSIONS_WORKSPACE_TABS.has(tab)) {
-                return this.openWorkspacePage(tab);
+        openExtensionsPage(tab?: MainWindowWorkspacePage) {
+            const targetTab = tab ?? this.extensionsActiveTab;
+
+            if (EXTENSIONS_WORKSPACE_TABS.has(targetTab)) {
+                return this.openWorkspacePage(targetTab);
             }
 
             return this.openWorkspacePage(MAIN_WINDOW_WORKSPACE_PAGES.EXTENSIONS);
@@ -515,6 +518,10 @@ export const useMainWindowStore = defineStore("mainwindow", {
 
         openCliToolsPage() {
             return this.openExtensionsPage(MAIN_WINDOW_WORKSPACE_PAGES.CLI_TOOLS);
+        },
+
+        openIngressOperatorPage() {
+            return this.openExtensionsPage(MAIN_WINDOW_WORKSPACE_PAGES.INGRESS_OPERATOR);
         },
 
         openBrowserPanelPage() {

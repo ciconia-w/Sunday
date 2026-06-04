@@ -67,6 +67,60 @@ QJsonObject defaultBrowserScreenshotResult(const QString &error = QStringLiteral
     return result;
 }
 
+QJsonObject defaultIngressOperatorState()
+{
+    QJsonObject replayCounts{
+        {QStringLiteral("total"), 0},
+        {QStringLiteral("pending"), 0},
+        {QStringLiteral("delivered"), 0},
+        {QStringLiteral("awaitingOperator"), 0},
+        {QStringLiteral("resolved"), 0},
+        {QStringLiteral("discarded"), 0},
+    };
+    QJsonObject replayWorker{
+        {QStringLiteral("enabled"), false},
+        {QStringLiteral("pollMs"), 5000},
+        {QStringLiteral("delaysMs"), QJsonArray()},
+    };
+    QJsonObject replayQueue{
+        {QStringLiteral("worker"), replayWorker},
+        {QStringLiteral("counts"), replayCounts},
+        {QStringLiteral("entries"), QJsonArray()},
+    };
+    QJsonObject backgroundReplay{
+        {QStringLiteral("enabled"), false},
+        {QStringLiteral("pollMs"), 5000},
+        {QStringLiteral("delaysMs"), QJsonArray()},
+        {QStringLiteral("mode"), QStringLiteral("in-process")},
+        {QStringLiteral("hasDedicatedReplayService"), false},
+    };
+    QJsonObject replyRetryPolicy{
+        {QStringLiteral("maxAttempts"), 1},
+        {QStringLiteral("delaysMs"), QJsonArray()},
+    };
+
+    return QJsonObject{
+        {QStringLiteral("routes"), QJsonArray()},
+        {QStringLiteral("replayQueue"), replayQueue},
+        {QStringLiteral("supportedReplyTransports"), QJsonArray{
+            QStringLiteral("webhook"),
+            QStringLiteral("lark-bot-webhook"),
+            QStringLiteral("slack-webhook"),
+        }},
+        {QStringLiteral("replyRetryPolicy"), replyRetryPolicy},
+        {QStringLiteral("backgroundReplay"), backgroundReplay},
+        {QStringLiteral("runtimeNote"), QStringLiteral("当前 background replay worker 仍运行在 sidecar 进程内；更强的 delivery reliability 仍需要 dedicated replay service。")},
+    };
+}
+
+QJsonObject defaultIngressOperatorActionResult(const QString &error = QStringLiteral("sidecar unavailable"))
+{
+    return QJsonObject{
+        {QStringLiteral("ok"), false},
+        {QStringLiteral("error"), error},
+    };
+}
+
 } // namespace
 
 ServiceConfigChannel::ServiceConfigChannel(QObject *parent)
@@ -291,6 +345,53 @@ QJsonObject ServiceConfigChannel::browserCaptureScreenshot(const QString &output
     payload.insert(QStringLiteral("ok"), true);
     payload.insert(QStringLiteral("error"), QString());
     return payload;
+}
+QJsonObject ServiceConfigChannel::getIngressOperatorState(bool includeResolved) const
+{
+    if (!m_sidecarClient) {
+        return defaultIngressOperatorState();
+    }
+
+    return m_sidecarClient->postJsonValueSync(
+        QStringLiteral("/service-config/get-ingress-operator-state"),
+        QVariantMap{{QStringLiteral("includeResolved"), includeResolved}}).toObject();
+}
+QJsonObject ServiceConfigChannel::replayIngressQueueEntry(const QString &id) const
+{
+    if (!m_sidecarClient) {
+        return defaultIngressOperatorActionResult();
+    }
+
+    QString errorMessage;
+    const QJsonValue result = m_sidecarClient->postJsonValueSync(
+        QStringLiteral("/service-config/replay-ingress-queue-entry"),
+        QVariantMap{{QStringLiteral("id"), id}},
+        &errorMessage);
+    if (!errorMessage.isEmpty()) {
+        return defaultIngressOperatorActionResult(errorMessage);
+    }
+
+    return result.toObject();
+}
+QJsonObject ServiceConfigChannel::resolveIngressQueueEntry(const QString &id, const QString &resolution) const
+{
+    if (!m_sidecarClient) {
+        return defaultIngressOperatorActionResult();
+    }
+
+    QString errorMessage;
+    const QJsonValue result = m_sidecarClient->postJsonValueSync(
+        QStringLiteral("/service-config/resolve-ingress-queue-entry"),
+        QVariantMap{
+            {QStringLiteral("id"), id},
+            {QStringLiteral("resolution"), resolution},
+        },
+        &errorMessage);
+    if (!errorMessage.isEmpty()) {
+        return defaultIngressOperatorActionResult(errorMessage);
+    }
+
+    return result.toObject();
 }
 QJsonObject ServiceConfigChannel::getModelConfig() const
 {

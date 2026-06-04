@@ -4,6 +4,7 @@ import { MAIN_WINDOW_WORKSPACE_PAGES } from "@/types/mainwindow";
 import SkillsPage from "@/views/window/mainwindow/page/settings/skills/SkillsPage";
 import CliToolsPage from "@/views/window/mainwindow/page/clitools/CliToolsPage";
 import McpServicesPage from "@/views/window/mainwindow/page/settings/mcpservices/McpServicesPage";
+import IngressOperatorPage from "@/views/window/mainwindow/page/settings/ingressoperator/IngressOperatorPage";
 import "@/assets/styles/window/mainwindow/page/settings/skills/SkillsPage.css";
 
 export default defineComponent({
@@ -12,6 +13,7 @@ export default defineComponent({
         SkillsPage,
         CliToolsPage,
         McpServicesPage,
+        IngressOperatorPage,
     },
     setup() {
         const backendStore = useBackendStore();
@@ -29,6 +31,10 @@ export default defineComponent({
             {
                 id: MAIN_WINDOW_WORKSPACE_PAGES.MCP_SERVICES,
                 label: "MCP",
+            },
+            {
+                id: MAIN_WINDOW_WORKSPACE_PAGES.INGRESS_OPERATOR,
+                label: "IM Bridge",
             },
         ]);
 
@@ -74,6 +80,7 @@ export default defineComponent({
                 {this.activeTab === MAIN_WINDOW_WORKSPACE_PAGES.SKILLS && <SkillsPage />}
                 {this.activeTab === MAIN_WINDOW_WORKSPACE_PAGES.CLI_TOOLS && <CliToolsPage />}
                 {this.activeTab === MAIN_WINDOW_WORKSPACE_PAGES.MCP_SERVICES && <McpServicesPage />}
+                {this.activeTab === MAIN_WINDOW_WORKSPACE_PAGES.INGRESS_OPERATOR && <IngressOperatorPage />}
             </div>
         );
     },

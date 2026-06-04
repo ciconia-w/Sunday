@@ -196,7 +196,6 @@ reply queue 会额外保留：
 当前还没有：
 
 - 指数退避策略
-- 前端 UI 管理面
 - 平台专属回执确认
 
 ## Background Replay
@@ -234,6 +233,21 @@ reply queue 现在已经有最小 background replay worker。
 - `POST /ingress/replay-queue/resolve`
 
 这些 endpoint 当前都是 sidecar operator surface，不经过前端 UI。
+
+另外，Sunday 前端扩展区现在已经补了一层最小 operator UI，通过 `serviceConfig` 通道读取这些 sidecar 状态并执行人工动作：
+
+- `getIngressOperatorState`
+- `replayIngressQueueEntry`
+- `resolveIngressQueueEntry`
+
+这层 UI 当前放在 `扩展 -> IM Bridge`，职责保持很窄：
+
+- 查看 reply routes
+- 查看 replay queue
+- 查看当前 delivery policy / background replay 模式
+- 对单条失败 delivery 执行 `立即重试 / 标记已处理 / 忽略`
+
+前端 UI 不直接管理 runtime 文件，也不绕开 sidecar operator API。
 
 ### Reply routes
 

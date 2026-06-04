@@ -556,6 +556,53 @@ export async function createRemoteInjectedChannels(baseUrl = "") {
                     errorHint: "service-config unavailable",
                 }),
             ),
+            getIngressOperatorState: callbackify(async (includeResolved: boolean = false) =>
+                postServiceConfig("/service-config/get-ingress-operator-state", { includeResolved }, {
+                    routes: [],
+                    replayQueue: {
+                        worker: {
+                            enabled: false,
+                            pollMs: 5000,
+                            delaysMs: [],
+                        },
+                        counts: {
+                            total: 0,
+                            pending: 0,
+                            delivered: 0,
+                            awaitingOperator: 0,
+                            resolved: 0,
+                            discarded: 0,
+                        },
+                        entries: [],
+                    },
+                    supportedReplyTransports: ["webhook", "lark-bot-webhook", "slack-webhook"],
+                    replyRetryPolicy: {
+                        maxAttempts: 1,
+                        delaysMs: [],
+                    },
+                    backgroundReplay: {
+                        enabled: false,
+                        pollMs: 5000,
+                        delaysMs: [],
+                        mode: "in-process",
+                        hasDedicatedReplayService: false,
+                    },
+                    runtimeNote: "service-config unavailable",
+                }),
+            ),
+            replayIngressQueueEntry: callbackify(async (id: string) =>
+                postServiceConfig("/service-config/replay-ingress-queue-entry", { id }, {
+                    ok: false,
+                    error: "service-config unavailable",
+                }),
+            ),
+            resolveIngressQueueEntry: callbackify(async (id: string, resolution: string) =>
+                postServiceConfig("/service-config/resolve-ingress-queue-entry", { id, resolution }, {
+                    id,
+                    status: resolution || "resolved",
+                    error: "service-config unavailable",
+                }),
+            ),
             getMcpThirdPartyAgreement: callbackify(async () =>
                 postServiceConfig("/service-config/get-mcp-third-party-agreement", {}, false),
             ),
