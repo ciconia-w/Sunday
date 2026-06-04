@@ -25,6 +25,9 @@ const checks = {
     ingressSupportsLarkWebhookTransport: externalIngressSource.includes("lark-bot-webhook")
         && externalIngressSource.includes("createHmac")
         && externalIngressSource.includes("replyWebhookSecret"),
+    ingressSupportsSlackWebhookTransport: externalIngressSource.includes("slack-webhook")
+        && externalIngressSource.includes("buildSlackReplyBody")
+        && externalIngressSource.includes("postSlackWebhookReply"),
     ingressPushesReplyOnFinish: externalIngressSource.includes("handleSessionFinished")
         && externalIngressSource.includes("postReply"),
     ingressPushesErrorOnFailure: externalIngressSource.includes("handleSessionError")
@@ -37,6 +40,10 @@ const checks = {
         && externalIngressSource.includes("createReplayQueueEntry")
         && externalIngressSource.includes("replayQueuedReply")
         && externalIngressSource.includes("resolveReplayQueueEntry"),
+    ingressRunsBackgroundReplayWorker: externalIngressSource.includes("backgroundReplayEnabled")
+        && externalIngressSource.includes("backgroundReplayDelaysMs")
+        && externalIngressSource.includes("startBackgroundReplayLoop")
+        && externalIngressSource.includes("runDueBackgroundReplays"),
     headlessRepliesPersistOnFinish: devServerSource.includes("persistHeadlessSessionRender")
         && devServerSource.includes("setConversationRender")
         && devServerSource.includes("saveConversation(current.conversationId)"),
@@ -57,6 +64,9 @@ const checks = {
         && ingressDocSource.includes("replyWebhookSecret")
         && ingressDocSource.includes("external-ingress-dead-letters.json")
         && ingressDocSource.includes("重试"),
+    docExplainsSlackAndBackgroundReplay: ingressDocSource.includes("slack-webhook")
+        && ingressDocSource.includes("background replay")
+        && ingressDocSource.includes("PERSONAL_AGENT_INGRESS_BACKGROUND_REPLAY_DELAYS_MS"),
     docExplainsReplayOperatorSurface: ingressDocSource.includes("external-ingress-replay-queue.json")
         && ingressDocSource.includes("/ingress/get-replay-queue")
         && ingressDocSource.includes("/ingress/replay-queue/replay")

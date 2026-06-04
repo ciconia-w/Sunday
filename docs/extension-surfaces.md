@@ -126,12 +126,14 @@ Current state:
 - first provider-specific adapter is now available via `lark-bot-webhook` / `feishu-bot-webhook`
 - reply delivery now has baseline retry + dead-letter handling in sidecar runtime state
 - persisted replay queue and sidecar operator API now exist for failed reply delivery
+- a second provider-specific adapter now exists via `slack-webhook`
+- pending reply deliveries can now be retried by an in-process background replay worker
 
 Current gaps:
 
 - platform-specific bridge logic still needs to be layered on top of the generic ingress contract
-- only one provider-specific transport exists today; broader platform coverage is still missing
-- retry policy is still minimal and in-process only; there is no front-end operator UI or background replay worker
+- provider coverage is still narrow; broader platform coverage is still missing
+- retry policy is still minimal and in-process only; there is no front-end operator UI or dedicated replay service
 
 Recommended next step:
 
