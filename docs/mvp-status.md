@@ -119,6 +119,9 @@ Date: 2026-06-03
   - GitHub / git 仓库导入
   - 导入后复制到受管的 user skills root
   - 已导入 skill 的删除闭环
+- skills 页面现在也提供明确的 source-of-truth 入口：
+  - 可查看 system / user / repo 三层 skills 来源
+  - 可直接打开来源说明文档、用户目录和仓库目录
 - skills API verifier 现在会在临时 skills root 下验证导入/删除闭环，不会污染真实 `~/.codex/skills`
 - `CLI tools` 已具备 sidecar 统一状态模型
 - `browser control` 已具备默认关闭、按需启用、按需注册工具的基础能力
@@ -200,7 +203,7 @@ Date: 2026-06-03
     - tool preview
     - clearer error feedback
 3. skills / CLI productization:
-   - skills 更明确的 source-of-truth 入口
+   - CLI install / update 路线继续产品化
 4. 然后再进入更大的扩展平台方向：
    - IM bridge
    - extension install / market flows

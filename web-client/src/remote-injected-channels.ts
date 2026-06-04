@@ -52,6 +52,7 @@ type RemoteRuntimeState = {
     assistants?: Array<Record<string, unknown>>;
     modelsByAssistant?: Record<string, Array<Record<string, unknown>>>;
     currentModelId?: string;
+    runtime?: Record<string, unknown>;
     system?: {
         activeColor?: string;
         fontInfo?: string;
@@ -419,6 +420,12 @@ export async function createRemoteInjectedChannels(baseUrl = "") {
             reloadSkills: callbackify(async () => undefined),
             setSkillEnabled: callbackify(async () => true),
             hasSkill: callbackify(async () => false),
+            getSkillsSourceOfTruth: callbackify(async () => ({
+                managedRootDir: "",
+                builtinRootDir: "",
+                repoSkillsDir: "",
+                sourceDocPath: "",
+            })),
             addSkillForWeb: callbackify(async () => ({
                 success: false,
                 error: "当前模式不支持导入技能，请在桌面宿主中操作。",
