@@ -250,6 +250,17 @@ export function ensureDevInjectedChannels() {
                 resolvedAt: "",
                 nextAttemptAt: "",
                 lastAttemptAt: "2026-06-04T13:25:00.000Z",
+                latestReceipt: {
+                    actor: "sidecar",
+                    mode: "manual",
+                    transport: "slack-webhook",
+                    ok: false,
+                    statusCode: 500,
+                    at: "2026-06-04T13:25:00.000Z",
+                    error: "Slack webhook returned HTTP 500",
+                    providerPayloadPreview: "{\"text\":\"Sunday 处理失败：demo webhook timeout\"}",
+                },
+                processing: null,
                 history: [
                     {
                         kind: "delivery-failed",
@@ -300,6 +311,17 @@ export function ensureDevInjectedChannels() {
                 resolvedAt: "2026-06-04T11:30:00.000Z",
                 nextAttemptAt: "",
                 lastAttemptAt: "2026-06-04T11:25:00.000Z",
+                latestReceipt: {
+                    actor: "sidecar",
+                    mode: "manual",
+                    transport: "webhook",
+                    ok: true,
+                    statusCode: 200,
+                    at: "2026-06-04T11:25:00.000Z",
+                    error: "",
+                    providerPayloadPreview: "{\"ok\":true,\"assistantText\":\"已完成处理\"}",
+                },
+                processing: null,
                 history: [
                     {
                         kind: "delivery-failed",
@@ -337,6 +359,7 @@ export function ensureDevInjectedChannels() {
         const counts = {
             total: visibleReplayEntries.length,
             pending: visibleReplayEntries.filter((entry) => entry.status === "pending").length,
+            processing: visibleReplayEntries.filter((entry) => Boolean(entry.processing?.ownerId)).length,
             delivered: visibleReplayEntries.filter((entry) => entry.status === "delivered").length,
             awaitingOperator: visibleReplayEntries.filter((entry) => entry.status === "awaiting-operator").length,
             resolved: visibleReplayEntries.filter((entry) => entry.status === "resolved").length,
@@ -394,10 +417,16 @@ export function ensureDevInjectedChannels() {
                     pausedAt: mockIngressBackgroundReplayPausedAt,
                     updatedAt: mockIngressBackgroundReplayUpdatedAt,
                 },
+                ownership: {
+                    routePersistence: "sidecar-route-store",
+                    replayQueuePersistence: "shared-runtime-store",
+                    automaticReplayExecutor: "sidecar-direct",
+                    serviceUsesSidecarOperatorApi: false,
+                },
             },
             runtimeNote: mockIngressBackgroundReplayPaused
                 ? "当前 automatic replay 已被 operator 暂停；手动重试和 resolve 仍可继续使用。"
-                : "当前 background replay worker 仍运行在 sidecar 进程内；更强的 delivery reliability 仍需要 dedicated replay service。",
+                : "当前 background replay worker 仍运行在 sidecar 进程内，但 replay queue 已统一下沉到 shared runtime store。",
         };
     };
 

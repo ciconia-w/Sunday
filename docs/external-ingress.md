@@ -245,6 +245,8 @@ reply queue 会额外保留：
 - 累计 attempt / replay 次数
 - delivered / resolved 等状态
 - 每条 queue entry 的 replay history（初始失败 / 自动或手动重试 / resolve）
+- `latestReceipt`（最近一次投递回执摘要：actor / mode / transport / HTTP 状态 / error）
+- `processing`（当前 claim owner / mode / lease）
 
 当前还没有：
 
@@ -281,19 +283,19 @@ reply queue 现在已经有最小 background replay worker。
 
 - `in-process`：worker 运行在 sidecar 进程内
 - `service`：worker 运行在 sidecar 管理的 dedicated replay service 子进程中
-- `standalone-service`：worker 运行在 sidecar 外部的独立进程中，但 queue / route 的所有权仍保留在 sidecar
+- `standalone-service`：worker 运行在 sidecar 外部的独立进程中
 
 当 `PERSONAL_AGENT_INGRESS_BACKGROUND_REPLAY_MODE=service` 时：
 
 - sidecar 会拉起 `ingress-replay-worker.mjs`
-- replay service 会通过 sidecar operator API 轮询 queue 并执行自动重放
+- replay service 会直接读取 shared replay queue 并执行自动重放
 - service heartbeat 会写入 runtime 目录下的：
   - `external-ingress-replay-service-status.json`
 
 当 `PERSONAL_AGENT_INGRESS_BACKGROUND_REPLAY_MODE=standalone-service` 时：
 
 - sidecar 不再托管 worker 子进程
-- 外部 replay service 仍通过 sidecar operator API 轮询 queue 并执行自动重放
+- 外部 replay service 会直接读取 shared replay queue 并执行自动重放
 - service heartbeat 同样会写入：
   - `external-ingress-replay-service-status.json`
 
@@ -313,10 +315,12 @@ background replay 当前支持两类 delivery policy：
 - `fixed`：按 `PERSONAL_AGENT_INGRESS_BACKGROUND_REPLAY_DELAYS_MS` 使用固定 delay
 - `exponential`：按 `INITIAL_DELAY_MS / MAX_DELAY_MS / MAX_ATTEMPTS / BACKOFF_MULTIPLIER` 计算指数退避
 
-当前这个 dedicated replay service 仍然是最小实现：
+当前 ownership contract：
 
-- replay history 已进入 operator state 和前端 UI，但还没有单独的导出/检索面
-- queue / route 的真实所有权仍保留在 sidecar，不是完全自持久化的独立服务
+- route persistence 仍由 sidecar 管理：`external-ingress-routes.json`
+- replay queue / operator control / service status 已下沉到 shared runtime store
+- dedicated / standalone worker 都直接访问 shared runtime store，不再依赖 sidecar operator API 轮询
+- replay history 和 delivery receipt 已进入 operator state 与前端 UI
 
 ## Operator Surface
 
@@ -360,6 +364,12 @@ background replay 当前支持两类 delivery policy：
 - 对单条失败 delivery 执行 `立即重试 / 标记已处理 / 忽略`
 
 前端 UI 不直接管理 runtime 文件，也不绕开 sidecar operator API。
+前端当前还会显示：
+
+- route persistence / replay queue ownership
+- automatic replay executor
+- 最近一次 delivery receipt
+- 当前 processing owner
 
 ### Reply routes
 
@@ -402,8 +412,12 @@ background replay 当前支持两类 delivery policy：
 - `payloadSummary`
 - `attemptCount`
 - `replayCount`
+- `automaticReplayCount`
 - `latestError`
 - `createdAt / updatedAt / deliveredAt / resolvedAt`
+- `nextAttemptAt / lastAttemptAt`
+- `latestReceipt`
+- `processing`
 
 ### Replay one entry
 
@@ -550,8 +564,24 @@ npm run verify:ingress-dedicated-replay-service-api
 - `PERSONAL_AGENT_INGRESS_BACKGROUND_REPLAY_MODE=service`
 - operator state 暴露 dedicated replay service 状态
 - replay worker PID 与 sidecar PID 分离
-- 自动重放由独立 replay worker 驱动并更新 delivered 状态
+- 自动重放由独立 replay worker 直接读取 shared replay queue 并更新 delivered 状态
+- operator state 暴露 shared queue ownership 和最新 delivery receipt
 - `external-ingress-replay-service-status.json` heartbeat 落盘
+
+standalone replay service verifier：
+
+```bash
+cd <repo-root>
+npm run verify:ingress-standalone-replay-service-api
+```
+
+这条 verifier 当前会验证：
+
+- `PERSONAL_AGENT_INGRESS_BACKGROUND_REPLAY_MODE=standalone-service`
+- operator state 暴露 standalone replay service 状态
+- 外部 worker PID 与 sidecar PID 分离
+- 自动重放由独立 replay worker 直接读取 shared replay queue 并更新 delivered 状态
+- operator state 暴露 shared queue ownership 和最新 delivery receipt
 
 operator surface verifier：
 

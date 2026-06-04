@@ -28,6 +28,11 @@ const markers = [
     "Standalone Replay Service",
     "Discord",
     "DingTalk",
+    "Queue Ownership",
+    "Route Persistence",
+    "Worker Access",
+    "Latest Receipt",
+    "Processing",
     "Worker 状态",
     "治理状态",
     "暂停时间",
@@ -40,11 +45,16 @@ const markers = [
     "data-ingress-operator-service-heartbeat",
     "data-ingress-operator-delivery-strategy",
     "data-ingress-operator-control-state",
+    "data-ingress-operator-queue-ownership",
+    "data-ingress-operator-route-ownership",
+    "data-ingress-operator-api-dependency",
     "data-ingress-operator-pause-action",
     "data-ingress-operator-resume-action",
     "data-ingress-operator-paused-at",
     "data-ingress-replay-history",
     "data-ingress-replay-history-item",
+    "data-ingress-replay-latest-receipt",
+    "data-ingress-replay-processing",
 ];
 
 const present = Object.fromEntries(markers.map((marker) => [marker, bundle.includes(marker)]));

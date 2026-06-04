@@ -131,13 +131,15 @@ Current state:
 - extension workspace now also has a minimal `IM Bridge` operator UI backed by `serviceConfig`
 - operator governance now includes persisted pause/resume for automatic replay, and the pause state survives sidecar restarts
 - replay queue entries now expose replay history in operator state and the `IM Bridge` UI
+- replay queue ownership is now down in a shared runtime store, and dedicated / standalone workers read it directly
+- operator state and `IM Bridge` UI now expose queue ownership, latest delivery receipt, and active processing claim
 
 Current gaps:
 
 - platform-specific bridge logic still needs to be layered on top of the generic ingress contract
 - provider coverage is still narrow; broader platform coverage is still missing
-- replay service process can now run standalone, but queue / route ownership and persistence still live in sidecar
-- retry policy is richer but still intentionally minimal; platform-specific delivery receipts, queue ownership migration, and finer governance are still missing
+- route persistence still lives in sidecar; only replay queue ownership has moved
+- retry policy is richer but still intentionally minimal; platform-specific delivery receipts and finer governance are still missing
 
 Recommended next step:
 

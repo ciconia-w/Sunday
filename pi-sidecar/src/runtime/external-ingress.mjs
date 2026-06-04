@@ -1,15 +1,14 @@
-import { createHmac, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
-
-const SUPPORTED_REPLY_TRANSPORTS = [
-    "webhook",
-    "lark-bot-webhook",
-    "dingtalk-bot-webhook",
-    "slack-webhook",
-    "discord-webhook",
-    "teams-webhook",
-];
+import { executeReplyDelivery, normalizeReplyTransport, normalizeRetryDelays, SUPPORTED_REPLY_TRANSPORTS } from "./ingress-reply-delivery.mjs";
+import {
+    IngressReplayStore,
+    createDefaultBackgroundReplayControl,
+    normalizeReplayProcessing,
+    normalizeReplayQueueEntryRecord as normalizeReplayQueueEntryRecordFromStore,
+    summarizeReplayQueueEntry as summarizeReplayQueueEntryFromStore,
+} from "./ingress-replay-store.mjs";
 const MAX_REPLAY_HISTORY_EVENTS = 12;
 
 function normalizeRouteValue(value, fallback) {
@@ -40,54 +39,11 @@ function normalizeNonNegativeInteger(value, fallback) {
     return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
 }
 
-function normalizeRetryDelays(value, fallback) {
-    if (typeof value !== "string" || !value.trim()) {
-        return fallback;
-    }
-
-    const normalized = value
-        .split(",")
-        .map((item) => normalizeNonNegativeInteger(item, -1))
-        .filter((item) => item >= 0);
-
-    return normalized.length > 0 ? normalized : fallback;
-}
-
 function normalizePositiveNumber(value, fallback) {
     const parsed = Number.parseFloat(String(value ?? ""));
     return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
-function normalizeReplyTransport(value) {
-    const normalized = typeof value === "string" ? value.trim() : "";
-    if (!normalized) {
-        return "";
-    }
-
-    if (normalized === "feishu-bot-webhook") {
-        return "lark-bot-webhook";
-    }
-
-    if (normalized === "slack-incoming-webhook") {
-        return "slack-webhook";
-    }
-
-    if (normalized === "discord-incoming-webhook") {
-        return "discord-webhook";
-    }
-
-    if (normalized === "dingtalk-webhook" || normalized === "dingtalk-custom-bot-webhook") {
-        return "dingtalk-bot-webhook";
-    }
-
-    if (normalized === "msteams-webhook"
-        || normalized === "microsoft-teams-webhook"
-        || normalized === "teams-incoming-webhook") {
-        return "teams-webhook";
-    }
-
-    return normalized;
-}
 
 export function normalizeBackgroundReplayMode(value) {
     return value === "service" || value === "standalone-service" ? value : "in-process";
@@ -96,10 +52,6 @@ export function normalizeBackgroundReplayMode(value) {
 export function backgroundReplayModeUsesDedicatedService(value) {
     const normalized = normalizeBackgroundReplayMode(value);
     return normalized === "service" || normalized === "standalone-service";
-}
-
-export function getBackgroundReplayServiceStatusPath(runtimeDir) {
-    return resolve(runtimeDir, "external-ingress-replay-service-status.json");
 }
 
 function normalizeBackgroundReplayStrategy(value) {
@@ -223,46 +175,6 @@ function sanitizeReplyTarget(replyTarget) {
     };
 }
 
-function summarizeReplyPayload(payload) {
-    const assistantText = typeof payload?.assistantText === "string" ? payload.assistantText.trim() : "";
-    const errorText = typeof payload?.error === "string" ? payload.error.trim() : "";
-
-    return {
-        ok: payload?.ok === true,
-        assistantTextPreview: assistantText ? assistantText.slice(0, 160) : "",
-        errorPreview: errorText ? errorText.slice(0, 160) : "",
-    };
-}
-
-function summarizeReplayQueueEntry(entry) {
-    if (!entry || typeof entry !== "object") {
-        return {};
-    }
-
-    return {
-        id: entry.id ?? "",
-        status: entry.status ?? "",
-        transport: entry.transport ?? "",
-        routeKey: entry.routeKey ?? "",
-        conversationId: entry.conversationId ?? "",
-        sessionId: entry.sessionId ?? "",
-        requestExternalMessageId: entry.requestExternalMessageId ?? "",
-        replyTarget: sanitizeReplyTarget(entry.replyTarget),
-        payloadSummary: summarizeReplyPayload(entry.payload),
-        attemptCount: normalizeNonNegativeInteger(entry.attemptCount, 0),
-        replayCount: normalizeNonNegativeInteger(entry.replayCount, 0),
-        automaticReplayCount: normalizeNonNegativeInteger(entry.automaticReplayCount, 0),
-        latestError: entry.latestError ?? "",
-        createdAt: entry.createdAt ?? "",
-        updatedAt: entry.updatedAt ?? "",
-        deliveredAt: entry.deliveredAt ?? "",
-        resolvedAt: entry.resolvedAt ?? "",
-        nextAttemptAt: entry.nextAttemptAt ?? "",
-        lastAttemptAt: entry.lastAttemptAt ?? "",
-        history: normalizeReplayHistory(entry.history, entry),
-    };
-}
-
 function normalizeReplayHistoryKind(value) {
     const normalized = typeof value === "string" ? value.trim() : "";
     return normalized || "unknown";
@@ -356,40 +268,8 @@ function appendReplayHistory(entry, event) {
     ]);
 }
 
-function normalizeReplayQueueEntryRecord(entry) {
-    const normalizedEntry = (entry && typeof entry === "object") ? { ...entry } : {};
-    normalizedEntry.history = normalizeReplayHistory(normalizedEntry.history, normalizedEntry);
-    return normalizedEntry;
-}
-
-function createDefaultBackgroundReplayControl() {
-    return {
-        paused: false,
-        pauseReason: "",
-        pausedAt: "",
-        updatedAt: "",
-    };
-}
-
-function formatPlainTextReply(payload) {
-    if (payload?.ok === true) {
-        return typeof payload?.assistantText === "string" && payload.assistantText.trim()
-            ? payload.assistantText.trim()
-            : "Sunday 已完成处理，但没有生成文本回复。";
-    }
-
-    const errorText = typeof payload?.error === "string" && payload.error.trim()
-        ? payload.error.trim()
-        : "unknown error";
-    return `Sunday 处理失败：${errorText}`;
-}
-
 function buildSupportedReplyTransports() {
     return [...SUPPORTED_REPLY_TRANSPORTS];
-}
-
-function wait(ms) {
-    return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function createFutureIso(ms) {
@@ -400,10 +280,7 @@ export class ExternalIngress {
     constructor(options) {
         this.options = options;
         this.routeStorePath = resolve(options.runtimeDir, "external-ingress-routes.json");
-        this.deadLetterPath = resolve(options.runtimeDir, "external-ingress-dead-letters.json");
-        this.replayQueuePath = resolve(options.runtimeDir, "external-ingress-replay-queue.json");
-        this.backgroundReplayControlPath = resolve(options.runtimeDir, "external-ingress-operator-control.json");
-        this.backgroundReplayServiceStatusPath = getBackgroundReplayServiceStatusPath(options.runtimeDir);
+        this.replayStore = new IngressReplayStore(options.runtimeDir);
         this.replyRetryDelaysMs = normalizeRetryDelays(
             process.env.PERSONAL_AGENT_INGRESS_REPLY_RETRY_DELAYS_MS,
             [1000, 3000],
@@ -423,7 +300,6 @@ export class ExternalIngress {
         this.backgroundReplayControl = createDefaultBackgroundReplayControl();
         this.sessionQueues = new Map();
         this.activeSessionJobs = new Map();
-        this.processingReplayEntryIds = new Set();
         this.backgroundReplayServiceSupervisorStateProvider = null;
         this.backgroundReplayLoopRunning = false;
         this.backgroundReplayTimer = null;
@@ -469,53 +345,20 @@ export class ExternalIngress {
     }
 
     async loadReplayQueue() {
-        try {
-            const raw = await readFile(this.replayQueuePath, "utf8");
-            const parsed = JSON.parse(raw);
-            const entries = Array.isArray(parsed?.entries) ? parsed.entries : [];
-
-            this.replayQueue = new Map(
-                entries
-                    .filter((entry) => typeof entry?.id === "string" && entry.id.trim())
-                    .map((entry) => {
-                        const normalizedEntry = normalizeReplayQueueEntryRecord(entry);
-                        return [normalizedEntry.id.trim(), normalizedEntry];
-                    }),
-            );
-        } catch {
-            this.replayQueue = new Map();
-        }
+        const entries = await this.replayStore.loadReplayQueueEntries();
+        this.replayQueue = new Map(entries.map((entry) => [entry.id.trim(), entry]));
     }
 
     async loadBackgroundReplayControl() {
-        try {
-            const raw = await readFile(this.backgroundReplayControlPath, "utf8");
-            const parsed = JSON.parse(raw);
-            this.backgroundReplayControl = {
-                paused: parsed?.paused === true,
-                pauseReason: typeof parsed?.pauseReason === "string" ? parsed.pauseReason : "",
-                pausedAt: typeof parsed?.pausedAt === "string" ? parsed.pausedAt : "",
-                updatedAt: typeof parsed?.updatedAt === "string" ? parsed.updatedAt : "",
-            };
-        } catch {
-            this.backgroundReplayControl = createDefaultBackgroundReplayControl();
-        }
+        this.backgroundReplayControl = await this.replayStore.loadBackgroundReplayControl();
     }
 
     async saveReplayQueue() {
-        await mkdir(dirname(this.replayQueuePath), { recursive: true });
-        const entries = [...this.replayQueue.values()].sort((left, right) =>
-            String(left.createdAt ?? "").localeCompare(String(right.createdAt ?? "")),
-        );
-        await writeFile(this.replayQueuePath, JSON.stringify({ entries }, null, 2));
+        await this.replayStore.saveReplayQueueEntries([...this.replayQueue.values()]);
     }
 
     async saveBackgroundReplayControl() {
-        await mkdir(dirname(this.backgroundReplayControlPath), { recursive: true });
-        await writeFile(
-            this.backgroundReplayControlPath,
-            JSON.stringify(this.backgroundReplayControl, null, 2),
-        );
+        this.backgroundReplayControl = await this.replayStore.saveBackgroundReplayControl(this.backgroundReplayControl);
     }
 
     startBackgroundReplayLoop() {
@@ -667,21 +510,6 @@ export class ExternalIngress {
         await this.saveRouteTargets();
     }
 
-    async appendDeadLetter(entry) {
-        let existingEntries = [];
-        try {
-            const raw = await readFile(this.deadLetterPath, "utf8");
-            const parsed = JSON.parse(raw);
-            existingEntries = Array.isArray(parsed?.entries) ? parsed.entries : [];
-        } catch {
-            existingEntries = [];
-        }
-
-        await mkdir(dirname(this.deadLetterPath), { recursive: true });
-        existingEntries.push(entry);
-        await writeFile(this.deadLetterPath, JSON.stringify({ entries: existingEntries }, null, 2));
-    }
-
     async listReplyRoutes() {
         await this.ensureReady();
         return [...this.routeTargets.values()]
@@ -700,15 +528,18 @@ export class ExternalIngress {
 
     async getReplayQueue(options = {}) {
         await this.ensureReady();
+        await this.loadReplayQueue();
+        await this.loadBackgroundReplayControl();
         const includeResolved = options.includeResolved === true;
         const entries = [...this.replayQueue.values()]
             .filter((entry) => includeResolved || !["resolved", "discarded"].includes(String(entry.status ?? "")))
             .sort((left, right) => String(left.createdAt ?? "").localeCompare(String(right.createdAt ?? "")))
-            .map((entry) => summarizeReplayQueueEntry(entry));
+            .map((entry) => summarizeReplayQueueEntryFromStore(entry));
 
         const counts = {
             total: entries.length,
             pending: entries.filter((entry) => entry.status === "pending").length,
+            processing: entries.filter((entry) => Boolean(entry.processing?.ownerId)).length,
             delivered: entries.filter((entry) => entry.status === "delivered").length,
             awaitingOperator: entries.filter((entry) => entry.status === "awaiting-operator").length,
             resolved: entries.filter((entry) => entry.status === "resolved").length,
@@ -750,23 +581,7 @@ export class ExternalIngress {
             managedBySidecar: this.backgroundReplayMode === "service",
         };
 
-        let fileStatus = {};
-        try {
-            const raw = await readFile(this.backgroundReplayServiceStatusPath, "utf8");
-            const parsed = JSON.parse(raw);
-            fileStatus = {
-                running: parsed?.running === true,
-                pid: normalizeNonNegativeInteger(parsed?.pid, 0),
-                startedAt: typeof parsed?.startedAt === "string" ? parsed.startedAt : "",
-                lastHeartbeatAt: typeof parsed?.lastHeartbeatAt === "string" ? parsed.lastHeartbeatAt : "",
-                lastRunAt: typeof parsed?.lastRunAt === "string" ? parsed.lastRunAt : "",
-                lastError: typeof parsed?.lastError === "string" ? parsed.lastError : "",
-                manager: typeof parsed?.manager === "string" ? parsed.manager : "",
-                managedBySidecar: parsed?.managedBySidecar === true,
-            };
-        } catch {
-            fileStatus = {};
-        }
+        const fileStatus = await this.replayStore.readBackgroundReplayServiceStatus();
 
         const supervisorStatus = this.backgroundReplayServiceSupervisorStateProvider
             ? (this.backgroundReplayServiceSupervisorStateProvider() ?? {})
@@ -827,20 +642,28 @@ export class ExternalIngress {
         const replayQueue = await this.getReplayQueue(options);
         const backgroundReplayServiceStatus = await this.getBackgroundReplayServiceStatus();
         const backgroundReplayControl = this.getBackgroundReplayControlState();
+        const ownership = {
+            routePersistence: "sidecar-route-store",
+            replayQueuePersistence: "shared-runtime-store",
+            automaticReplayExecutor: this.usesDedicatedBackgroundReplayService()
+                ? (this.backgroundReplayMode === "service" ? "service-worker-direct" : "standalone-worker-direct")
+                : "sidecar-direct",
+            serviceUsesSidecarOperatorApi: false,
+        };
 
         let runtimeNote = "background replay 已关闭。";
         if (this.backgroundReplayEnabled && backgroundReplayControl.paused) {
             runtimeNote = "当前 automatic replay 已被 operator 暂停；手动重试和 resolve 仍可继续使用。";
         } else if (this.backgroundReplayEnabled && this.backgroundReplayMode === "service") {
             runtimeNote = backgroundReplayServiceStatus.running
-                ? "当前 background replay 由 sidecar 管理的 dedicated replay service 驱动；sidecar 继续保有 route / replay queue 与 operator API。"
+                ? "当前 background replay 由 sidecar 管理的 dedicated replay service 驱动；worker 已直接读取 shared replay queue，不再通过 sidecar operator API 轮询待重放项。"
                 : "当前 background replay 已切到 sidecar-managed dedicated replay service 模式，但 worker 暂未进入稳定运行态。";
         } else if (this.backgroundReplayEnabled && this.backgroundReplayMode === "standalone-service") {
             runtimeNote = backgroundReplayServiceStatus.running
-                ? "当前 background replay 由独立 replay service 驱动；sidecar 只保有 route / replay queue 与 operator API。"
+                ? "当前 background replay 由独立 replay service 驱动；queue ownership 已下沉到 shared runtime store，worker 直接执行自动重放。"
                 : "当前 background replay 已切到 standalone replay service 模式，但外部 worker 暂未进入稳定运行态。";
         } else if (this.backgroundReplayEnabled) {
-            runtimeNote = "当前 background replay worker 仍运行在 sidecar 进程内；更强的 delivery reliability 仍需要 dedicated replay service。";
+            runtimeNote = "当前 background replay worker 仍运行在 sidecar 进程内，但 replay queue 已统一下沉到 shared runtime store。";
         }
 
         return {
@@ -867,12 +690,13 @@ export class ExternalIngress {
                 },
                 serviceStatus: backgroundReplayServiceStatus,
                 control: backgroundReplayControl,
+                ownership,
             },
             runtimeNote,
         };
     }
 
-    async createReplayQueueEntry(replyTarget, payload, errors) {
+    async createReplayQueueEntry(replyTarget, payload, errors, latestReceipt = null) {
         const now = new Date().toISOString();
         const nextAttemptAt =
             this.backgroundReplayEnabled && this.backgroundReplayDelaysMs.length > 0
@@ -900,6 +724,8 @@ export class ExternalIngress {
             nextAttemptAt,
             lastAttemptAt: "",
             history: [],
+            latestReceipt,
+            processing: null,
         };
         entry.history = appendReplayHistory(entry, {
             kind: "delivery-failed",
@@ -911,9 +737,9 @@ export class ExternalIngress {
             error: entry.latestError,
         });
 
-        this.replayQueue.set(entry.id, entry);
-        await this.saveReplayQueue();
-        return entry;
+        const storedEntry = await this.replayStore.appendReplayQueueEntry(entry);
+        this.replayQueue.set(storedEntry.id, storedEntry);
+        return storedEntry;
     }
 
     getRouteIdentity(body) {
@@ -1093,255 +919,12 @@ export class ExternalIngress {
         });
     }
 
-    async executeReplyDelivery(replyTarget, payload) {
-        const errors = [];
-        const maxAttempts = this.replyRetryDelaysMs.length + 1;
-
-        for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-            try {
-                const result = await this.postReply(replyTarget, payload);
-                return {
-                    ok: true,
-                    result,
-                    errors,
-                    attemptCount: attempt,
-                };
-            } catch (error) {
-                const errorMessage = error instanceof Error ? error.message : String(error);
-                errors.push({
-                    attempt,
-                    error: errorMessage,
-                    at: new Date().toISOString(),
-                });
-
-                if (attempt < maxAttempts) {
-                    await wait(this.replyRetryDelaysMs[attempt - 1] ?? 0);
-                    continue;
-                }
-            }
-        }
-
-        return {
-            ok: false,
-            errors,
-            attemptCount: errors.length,
-        };
-    }
-
-    createLarkBotSignature(secret) {
-        const timestamp = String(Math.floor(Date.now() / 1000));
-        const stringToSign = `${timestamp}\n${secret}`;
-        const sign = createHmac("sha256", stringToSign).digest("base64");
-
-        return {
-            timestamp,
-            sign,
-        };
-    }
-
-    createDingtalkBotSignature(secret) {
-        const timestamp = String(Date.now());
-        const stringToSign = `${timestamp}\n${secret}`;
-        const sign = encodeURIComponent(
-            createHmac("sha256", secret).update(stringToSign).digest("base64"),
-        );
-
-        return {
-            timestamp,
-            sign,
-        };
-    }
-
-    buildLarkBotReplyBody(replyTarget, payload) {
-        const body = {
-            msg_type: "text",
-            content: {
-                text: formatPlainTextReply(payload),
-            },
-        };
-
-        if (replyTarget.secret) {
-            const signature = this.createLarkBotSignature(replyTarget.secret);
-            body.timestamp = signature.timestamp;
-            body.sign = signature.sign;
-        }
-
-        return body;
-    }
-
-    buildSlackReplyBody(payload) {
-        return {
-            text: formatPlainTextReply(payload),
-        };
-    }
-
-    buildDingtalkReplyBody(payload) {
-        return {
-            msgtype: "text",
-            text: {
-                content: formatPlainTextReply(payload),
-            },
-        };
-    }
-
-    buildDiscordReplyBody(payload) {
-        return {
-            content: formatPlainTextReply(payload),
-        };
-    }
-
-    buildTeamsReplyBody(payload) {
-        return {
-            text: formatPlainTextReply(payload),
-        };
-    }
-
-    async postGenericWebhookReply(replyTarget, payload) {
-        const response = await fetch(replyTarget.url, {
-            method: "POST",
-            headers: {
-                "content-type": "application/json; charset=utf-8",
-                ...replyTarget.headers,
-            },
-            body: JSON.stringify(payload),
-        });
-
-        if (!response.ok) {
-            throw new Error(`Reply webhook returned HTTP ${response.status}`);
-        }
-
-        return {
-            ok: true,
-            transport: replyTarget.transport,
-            status: response.status,
-        };
-    }
-
-    async postLarkBotWebhookReply(replyTarget, payload) {
-        const body = this.buildLarkBotReplyBody(replyTarget, payload);
-        const response = await fetch(replyTarget.url, {
-            method: "POST",
-            headers: {
-                "content-type": "application/json; charset=utf-8",
-                ...replyTarget.headers,
-            },
-            body: JSON.stringify(body),
-        });
-
-        if (!response.ok) {
-            throw new Error(`Lark bot webhook returned HTTP ${response.status}`);
-        }
-
-        return {
-            ok: true,
-            transport: replyTarget.transport,
-            status: response.status,
-            providerPayload: body,
-        };
-    }
-
-    async postSlackWebhookReply(replyTarget, payload) {
-        const body = this.buildSlackReplyBody(payload);
-        const response = await fetch(replyTarget.url, {
-            method: "POST",
-            headers: {
-                "content-type": "application/json; charset=utf-8",
-                ...replyTarget.headers,
-            },
-            body: JSON.stringify(body),
-        });
-
-        if (!response.ok) {
-            throw new Error(`Slack webhook returned HTTP ${response.status}`);
-        }
-
-        return {
-            ok: true,
-            transport: replyTarget.transport,
-            status: response.status,
-            providerPayload: body,
-        };
-    }
-
-    async postDingtalkBotWebhookReply(replyTarget, payload) {
-        const body = this.buildDingtalkReplyBody(payload);
-        const targetUrl = new URL(replyTarget.url);
-
-        if (replyTarget.secret) {
-            const signature = this.createDingtalkBotSignature(replyTarget.secret);
-            targetUrl.searchParams.set("timestamp", signature.timestamp);
-            targetUrl.searchParams.set("sign", signature.sign);
-        }
-
-        const response = await fetch(targetUrl.toString(), {
-            method: "POST",
-            headers: {
-                "content-type": "application/json; charset=utf-8",
-                ...replyTarget.headers,
-            },
-            body: JSON.stringify(body),
-        });
-
-        if (!response.ok) {
-            throw new Error(`DingTalk bot webhook returned HTTP ${response.status}`);
-        }
-
-        return {
-            ok: true,
-            transport: replyTarget.transport,
-            status: response.status,
-            providerPayload: body,
-        };
-    }
-
-    async postDiscordWebhookReply(replyTarget, payload) {
-        const body = this.buildDiscordReplyBody(payload);
-        const response = await fetch(replyTarget.url, {
-            method: "POST",
-            headers: {
-                "content-type": "application/json; charset=utf-8",
-                ...replyTarget.headers,
-            },
-            body: JSON.stringify(body),
-        });
-
-        if (!response.ok) {
-            throw new Error(`Discord webhook returned HTTP ${response.status}`);
-        }
-
-        return {
-            ok: true,
-            transport: replyTarget.transport,
-            status: response.status,
-            providerPayload: body,
-        };
-    }
-
-    async postTeamsWebhookReply(replyTarget, payload) {
-        const body = this.buildTeamsReplyBody(payload);
-        const response = await fetch(replyTarget.url, {
-            method: "POST",
-            headers: {
-                "content-type": "application/json; charset=utf-8",
-                ...replyTarget.headers,
-            },
-            body: JSON.stringify(body),
-        });
-
-        if (!response.ok) {
-            throw new Error(`Teams webhook returned HTTP ${response.status}`);
-        }
-
-        return {
-            ok: true,
-            transport: replyTarget.transport,
-            status: response.status,
-            providerPayload: body,
-        };
-    }
-
     async deliverReply(replyTarget, payload) {
-        const delivery = await this.executeReplyDelivery(replyTarget, payload);
+        const delivery = await executeReplyDelivery(replyTarget, payload, {
+            retryDelaysMs: this.replyRetryDelaysMs,
+            actor: "sidecar",
+            mode: "initial",
+        });
         if (delivery.ok) {
             return {
                 ...delivery.result,
@@ -1349,7 +932,12 @@ export class ExternalIngress {
             };
         }
 
-        const replayQueueEntry = await this.createReplayQueueEntry(replyTarget, payload, delivery.errors);
+        const replayQueueEntry = await this.createReplayQueueEntry(
+            replyTarget,
+            payload,
+            delivery.errors,
+            delivery.latestReceipt ?? null,
+        );
         const deadLetterEntry = {
             id: randomUUID(),
             transport: replyTarget.transport ?? "",
@@ -1364,7 +952,7 @@ export class ExternalIngress {
             errors: delivery.errors,
             createdAt: new Date().toISOString(),
         };
-        await this.appendDeadLetter(deadLetterEntry);
+        await this.replayStore.appendDeadLetter(deadLetterEntry);
 
         return {
             ok: false,
@@ -1387,17 +975,20 @@ export class ExternalIngress {
             : -1;
     }
 
-    tryBeginReplayProcessing(id) {
-        if (this.processingReplayEntryIds.has(id)) {
-            return false;
-        }
+    getReplayProcessorDescriptor(options = {}) {
+        const processorOwnerId = typeof options.processorOwnerId === "string" && options.processorOwnerId.trim()
+            ? options.processorOwnerId.trim()
+            : "sidecar";
+        const processorKind = typeof options.processorKind === "string" && options.processorKind.trim()
+            ? options.processorKind.trim()
+            : "sidecar";
+        const mode = options.automatic === true ? "automatic" : "manual";
 
-        this.processingReplayEntryIds.add(id);
-        return true;
-    }
-
-    finishReplayProcessing(id) {
-        this.processingReplayEntryIds.delete(id);
+        return {
+            processorOwnerId,
+            processorKind,
+            mode,
+        };
     }
 
     async replayQueuedReply(id, options = {}) {
@@ -1407,7 +998,7 @@ export class ExternalIngress {
             throw new Error("Replay queue entry id is required");
         }
 
-        const entry = this.replayQueue.get(normalizedId);
+        const entry = await this.replayStore.getReplayQueueEntry(normalizedId);
         if (!entry) {
             throw new Error(`Replay queue entry not found: ${normalizedId}`);
         }
@@ -1416,88 +1007,111 @@ export class ExternalIngress {
             throw new Error(`Replay queue entry is already ${entry.status}`);
         }
 
-        if (!this.tryBeginReplayProcessing(normalizedId)) {
+        const automatic = options.automatic === true;
+        if (automatic) {
+            await this.loadBackgroundReplayControl();
+        }
+        if (automatic && this.isBackgroundReplayPaused()) {
+            return {
+                ok: false,
+                automatic: true,
+                skipped: true,
+                reason: "paused",
+                error: "Background replay is paused",
+                entry: summarizeReplayQueueEntryFromStore(entry),
+            };
+        }
+
+        const processor = this.getReplayProcessorDescriptor(options);
+        const claimedEntry = await this.replayStore.claimReplayQueueEntry(normalizedId, {
+            ownerId: processor.processorOwnerId,
+            ownerKind: processor.processorKind,
+            mode: processor.mode,
+            ttlMs: Math.max(this.backgroundReplayPollMs * 4, 5000),
+        });
+        if (!claimedEntry) {
             throw new Error(`Replay queue entry is already being processed: ${normalizedId}`);
         }
 
-        try {
-            const automatic = options.automatic === true;
-            if (automatic && this.isBackgroundReplayPaused()) {
-                return {
-                    ok: false,
-                    automatic: true,
-                    skipped: true,
-                    reason: "paused",
-                    error: "Background replay is paused",
-                    entry: summarizeReplayQueueEntry(entry),
-                };
+        const delivery = await executeReplyDelivery(claimedEntry.replyTarget ?? {}, claimedEntry.payload ?? {}, {
+            retryDelaysMs: this.replyRetryDelaysMs,
+            actor: processor.processorKind,
+            mode: automatic ? "automatic" : "manual",
+        });
+
+        const updatedEntry = await this.replayStore.mutateReplayQueue(normalizedId, async (currentEntry) => {
+            const processing = normalizeReplayProcessing(currentEntry.processing);
+            if (processing?.ownerId !== processor.processorOwnerId) {
+                throw new Error(`Replay queue entry processing ownership changed: ${normalizedId}`);
             }
-            const delivery = await this.executeReplyDelivery(entry.replyTarget ?? {}, entry.payload ?? {});
+
+            const nextEntry = normalizeReplayQueueEntryRecordFromStore(currentEntry);
             const now = new Date().toISOString();
-            entry.attemptCount = normalizeNonNegativeInteger(entry.attemptCount, 0) + delivery.attemptCount;
-            entry.updatedAt = now;
-            entry.lastAttemptAt = now;
+            nextEntry.processing = null;
+            nextEntry.attemptCount = normalizeNonNegativeInteger(nextEntry.attemptCount, 0) + delivery.attemptCount;
+            nextEntry.updatedAt = now;
+            nextEntry.lastAttemptAt = now;
+            nextEntry.latestReceipt = delivery.latestReceipt ?? nextEntry.latestReceipt ?? null;
 
             if (automatic) {
-                entry.automaticReplayCount = normalizeNonNegativeInteger(entry.automaticReplayCount, 0) + 1;
+                nextEntry.automaticReplayCount = normalizeNonNegativeInteger(nextEntry.automaticReplayCount, 0) + 1;
             } else {
-                entry.replayCount = normalizeNonNegativeInteger(entry.replayCount, 0) + 1;
+                nextEntry.replayCount = normalizeNonNegativeInteger(nextEntry.replayCount, 0) + 1;
             }
 
             if (delivery.ok) {
-                entry.status = "delivered";
-                entry.latestError = "";
-                entry.deliveredAt = now;
-                entry.nextAttemptAt = "";
-                entry.history = appendReplayHistory(entry, {
+                nextEntry.status = "delivered";
+                nextEntry.latestError = "";
+                nextEntry.deliveredAt = now;
+                nextEntry.nextAttemptAt = "";
+                nextEntry.history = appendReplayHistory(nextEntry, {
                     kind: "replay-succeeded",
                     mode: automatic ? "automatic" : "manual",
                     at: now,
                     attemptCount: delivery.attemptCount,
-                    totalAttemptCount: entry.attemptCount,
-                    status: entry.status,
+                    totalAttemptCount: nextEntry.attemptCount,
+                    status: nextEntry.status,
                     error: "",
                 });
             } else {
-                entry.latestError = delivery.errors[delivery.errors.length - 1]?.error ?? "Reply delivery failed";
-                entry.errors = [...(Array.isArray(entry.errors) ? entry.errors : []), ...delivery.errors];
+                nextEntry.latestError = delivery.errors[delivery.errors.length - 1]?.error ?? "Reply delivery failed";
+                nextEntry.errors = [...(Array.isArray(nextEntry.errors) ? nextEntry.errors : []), ...delivery.errors];
 
-                const currentAutomaticReplayCount = normalizeNonNegativeInteger(entry.automaticReplayCount, 0);
+                const currentAutomaticReplayCount = normalizeNonNegativeInteger(nextEntry.automaticReplayCount, 0);
                 const nextDelayIndex = automatic ? currentAutomaticReplayCount : currentAutomaticReplayCount;
                 const nextDelayMs = this.getNextAutomaticReplayDelayMsForIndex(nextDelayIndex);
 
                 if (nextDelayMs >= 0) {
-                    entry.status = "pending";
-                    entry.nextAttemptAt = createFutureIso(nextDelayMs);
+                    nextEntry.status = "pending";
+                    nextEntry.nextAttemptAt = createFutureIso(nextDelayMs);
                 } else {
-                    entry.status = "awaiting-operator";
-                    entry.nextAttemptAt = "";
+                    nextEntry.status = "awaiting-operator";
+                    nextEntry.nextAttemptAt = "";
                 }
 
-                entry.history = appendReplayHistory(entry, {
+                nextEntry.history = appendReplayHistory(nextEntry, {
                     kind: "replay-failed",
                     mode: automatic ? "automatic" : "manual",
                     at: now,
                     attemptCount: delivery.attemptCount,
-                    totalAttemptCount: entry.attemptCount,
-                    status: entry.status,
-                    error: entry.latestError,
+                    totalAttemptCount: nextEntry.attemptCount,
+                    status: nextEntry.status,
+                    error: nextEntry.latestError,
                 });
             }
 
-            this.replayQueue.set(entry.id, entry);
-            await this.saveReplayQueue();
+            return nextEntry;
+        });
 
-            return {
-                ok: delivery.ok,
-                automatic,
-                attemptCount: delivery.attemptCount,
-                error: delivery.ok ? "" : entry.latestError,
-                entry: summarizeReplayQueueEntry(entry),
-            };
-        } finally {
-            this.finishReplayProcessing(normalizedId);
-        }
+        this.replayQueue.set(updatedEntry.id, updatedEntry);
+
+        return {
+            ok: delivery.ok,
+            automatic,
+            attemptCount: delivery.attemptCount,
+            error: delivery.ok ? "" : updatedEntry.latestError,
+            entry: summarizeReplayQueueEntryFromStore(updatedEntry),
+        };
     }
 
     async resolveReplayQueueEntry(id, resolution) {
@@ -1514,27 +1128,34 @@ export class ExternalIngress {
             throw new Error(`Unsupported replay queue resolution: ${normalizedResolution}`);
         }
 
-        const entry = this.replayQueue.get(normalizedId);
+        const entry = await this.replayStore.getReplayQueueEntry(normalizedId);
         if (!entry) {
             throw new Error(`Replay queue entry not found: ${normalizedId}`);
         }
+        const processing = normalizeReplayProcessing(entry.processing);
+        if (processing?.ownerId) {
+            throw new Error(`Replay queue entry is currently being processed by ${processing.ownerKind || processing.ownerId}`);
+        }
 
-        const now = new Date().toISOString();
-        entry.status = normalizedResolution;
-        entry.resolvedAt = now;
-        entry.updatedAt = now;
-        entry.history = appendReplayHistory(entry, {
-            kind: normalizedResolution,
-            mode: "operator",
-            at: now,
-            totalAttemptCount: normalizeNonNegativeInteger(entry.attemptCount, 0),
-            status: normalizedResolution,
-            error: "",
+        const updatedEntry = await this.replayStore.mutateReplayQueue(normalizedId, async (currentEntry) => {
+            const nextEntry = normalizeReplayQueueEntryRecordFromStore(currentEntry);
+            const now = new Date().toISOString();
+            nextEntry.status = normalizedResolution;
+            nextEntry.resolvedAt = now;
+            nextEntry.updatedAt = now;
+            nextEntry.history = appendReplayHistory(nextEntry, {
+                kind: normalizedResolution,
+                mode: "operator",
+                at: now,
+                totalAttemptCount: normalizeNonNegativeInteger(nextEntry.attemptCount, 0),
+                status: normalizedResolution,
+                error: "",
+            });
+            return nextEntry;
         });
-        this.replayQueue.set(entry.id, entry);
-        await this.saveReplayQueue();
+        this.replayQueue.set(updatedEntry.id, updatedEntry);
 
-        return summarizeReplayQueueEntry(entry);
+        return summarizeReplayQueueEntryFromStore(updatedEntry);
     }
 
     async runDueBackgroundReplays() {
@@ -1545,9 +1166,11 @@ export class ExternalIngress {
         this.backgroundReplayLoopRunning = true;
         try {
             await this.ensureReady();
+            await this.loadBackgroundReplayControl();
             if (this.isBackgroundReplayPaused()) {
                 return;
             }
+            await this.loadReplayQueue();
             const now = Date.now();
             const dueEntries = [...this.replayQueue.values()]
                 .filter((entry) => String(entry.status ?? "") === "pending")
@@ -1557,7 +1180,11 @@ export class ExternalIngress {
 
             for (const entry of dueEntries) {
                 try {
-                    await this.replayQueuedReply(entry.id, { automatic: true });
+                    await this.replayQueuedReply(entry.id, {
+                        automatic: true,
+                        processorOwnerId: `sidecar-worker:${process.pid}`,
+                        processorKind: "sidecar-worker",
+                    });
                 } catch (error) {
                     console.error("[external-ingress] background replay failed:", error);
                 }
@@ -1565,33 +1192,5 @@ export class ExternalIngress {
         } finally {
             this.backgroundReplayLoopRunning = false;
         }
-    }
-
-    async postReply(replyTarget, payload) {
-        if (replyTarget.transport === "webhook") {
-            return this.postGenericWebhookReply(replyTarget, payload);
-        }
-
-        if (replyTarget.transport === "lark-bot-webhook") {
-            return this.postLarkBotWebhookReply(replyTarget, payload);
-        }
-
-        if (replyTarget.transport === "slack-webhook") {
-            return this.postSlackWebhookReply(replyTarget, payload);
-        }
-
-        if (replyTarget.transport === "dingtalk-bot-webhook") {
-            return this.postDingtalkBotWebhookReply(replyTarget, payload);
-        }
-
-        if (replyTarget.transport === "discord-webhook") {
-            return this.postDiscordWebhookReply(replyTarget, payload);
-        }
-
-        if (replyTarget.transport === "teams-webhook") {
-            return this.postTeamsWebhookReply(replyTarget, payload);
-        }
-
-        throw new Error(`Unsupported reply transport: ${replyTarget.transport}`);
     }
 }

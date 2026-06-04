@@ -4,12 +4,23 @@ import { repoRoot } from "./paths.mjs";
 
 const externalIngressPath = join(repoRoot, "pi-sidecar", "src", "runtime", "external-ingress.mjs");
 const ingressReplayWorkerPath = join(repoRoot, "pi-sidecar", "src", "runtime", "ingress-replay-worker.mjs");
+const ingressReplayStorePath = join(repoRoot, "pi-sidecar", "src", "runtime", "ingress-replay-store.mjs");
+const ingressReplyDeliveryPath = join(repoRoot, "pi-sidecar", "src", "runtime", "ingress-reply-delivery.mjs");
 const devServerPath = join(repoRoot, "pi-sidecar", "src", "dev-server.mjs");
 const ingressDocPath = join(repoRoot, "docs", "external-ingress.md");
 
-const [externalIngressSource, ingressReplayWorkerSource, devServerSource, ingressDocSource] = await Promise.all([
+const [
+    externalIngressSource,
+    ingressReplayWorkerSource,
+    ingressReplayStoreSource,
+    ingressReplyDeliverySource,
+    devServerSource,
+    ingressDocSource,
+] = await Promise.all([
     readFile(externalIngressPath, "utf8"),
     readFile(ingressReplayWorkerPath, "utf8"),
+    readFile(ingressReplayStorePath, "utf8"),
+    readFile(ingressReplyDeliveryPath, "utf8"),
     readFile(devServerPath, "utf8"),
     readFile(ingressDocPath, "utf8"),
 ]);
@@ -24,54 +35,61 @@ const checks = {
     ingressStoresReplyWebhookRoute: externalIngressSource.includes("replyWebhookUrl")
         && externalIngressSource.includes("routeStorePath")
         && externalIngressSource.includes("saveRouteTargets"),
-    ingressSupportsLarkWebhookTransport: externalIngressSource.includes("lark-bot-webhook")
-        && externalIngressSource.includes("createHmac")
-        && externalIngressSource.includes("replyWebhookSecret"),
-    ingressSupportsSlackWebhookTransport: externalIngressSource.includes("slack-webhook")
-        && externalIngressSource.includes("buildSlackReplyBody")
-        && externalIngressSource.includes("postSlackWebhookReply"),
-    ingressSupportsDingtalkWebhookTransport: externalIngressSource.includes("dingtalk-bot-webhook")
-        && externalIngressSource.includes("buildDingtalkReplyBody")
-        && externalIngressSource.includes("postDingtalkBotWebhookReply")
-        && externalIngressSource.includes("createDingtalkBotSignature"),
-    ingressSupportsDiscordWebhookTransport: externalIngressSource.includes("discord-webhook")
-        && externalIngressSource.includes("buildDiscordReplyBody")
-        && externalIngressSource.includes("postDiscordWebhookReply"),
-    ingressSupportsTeamsWebhookTransport: externalIngressSource.includes("teams-webhook")
-        && externalIngressSource.includes("buildTeamsReplyBody")
-        && externalIngressSource.includes("postTeamsWebhookReply"),
+    ingressSupportsLarkWebhookTransport: ingressReplyDeliverySource.includes("lark-bot-webhook")
+        && ingressReplyDeliverySource.includes("createHmac")
+        && ingressReplyDeliverySource.includes("buildLarkBotReplyBody"),
+    ingressSupportsSlackWebhookTransport: ingressReplyDeliverySource.includes("slack-webhook")
+        && ingressReplyDeliverySource.includes("buildSlackReplyBody")
+        && ingressReplyDeliverySource.includes("postSlackWebhookReply"),
+    ingressSupportsDingtalkWebhookTransport: ingressReplyDeliverySource.includes("dingtalk-bot-webhook")
+        && ingressReplyDeliverySource.includes("buildDingtalkReplyBody")
+        && ingressReplyDeliverySource.includes("createDingtalkBotSignature"),
+    ingressSupportsDiscordWebhookTransport: ingressReplyDeliverySource.includes("discord-webhook")
+        && ingressReplyDeliverySource.includes("buildDiscordReplyBody")
+        && ingressReplyDeliverySource.includes("postDiscordWebhookReply"),
+    ingressSupportsTeamsWebhookTransport: ingressReplyDeliverySource.includes("teams-webhook")
+        && ingressReplyDeliverySource.includes("buildTeamsReplyBody")
+        && ingressReplyDeliverySource.includes("postTeamsWebhookReply"),
     ingressPushesReplyOnFinish: externalIngressSource.includes("handleSessionFinished")
-        && externalIngressSource.includes("postReply"),
+        && externalIngressSource.includes("deliverReply("),
     ingressPushesErrorOnFailure: externalIngressSource.includes("handleSessionError")
         && externalIngressSource.includes("errorCode"),
     ingressRetriesAndStoresDeadLetters: externalIngressSource.includes("replyRetryDelaysMs")
-        && externalIngressSource.includes("deadLetterPath")
         && externalIngressSource.includes("appendDeadLetter")
-        && externalIngressSource.includes("attemptCount"),
-    ingressPersistsReplayQueue: externalIngressSource.includes("replayQueuePath")
-        && externalIngressSource.includes("createReplayQueueEntry")
+        && ingressReplayStoreSource.includes("deadLetterPath")
+        && ingressReplyDeliverySource.includes("attemptCount"),
+    ingressPersistsReplayQueue: externalIngressSource.includes("createReplayQueueEntry")
         && externalIngressSource.includes("replayQueuedReply")
-        && externalIngressSource.includes("resolveReplayQueueEntry"),
+        && externalIngressSource.includes("resolveReplayQueueEntry")
+        && ingressReplayStoreSource.includes("replayQueuePath")
+        && ingressReplayStoreSource.includes("claimReplayQueueEntry")
+        && ingressReplayStoreSource.includes("mutateReplayQueue"),
+    ingressStoresDeliveryReceiptsAndClaims: ingressReplayStoreSource.includes("latestReceipt")
+        && ingressReplayStoreSource.includes("processing")
+        && ingressReplayStoreSource.includes("createDeliveryReceipt")
+        && ingressReplayStoreSource.includes("createReplayProcessingClaim"),
     ingressRunsBackgroundReplayWorker: externalIngressSource.includes("backgroundReplayEnabled")
         && externalIngressSource.includes("backgroundReplayDelaysMs")
         && externalIngressSource.includes("startBackgroundReplayLoop")
         && externalIngressSource.includes("runDueBackgroundReplays"),
     ingressSupportsDedicatedReplayServiceMode: externalIngressSource.includes("backgroundReplayMode")
-        && externalIngressSource.includes("usesDedicatedBackgroundReplayService")
-        && externalIngressSource.includes("serviceStatus")
-        && externalIngressSource.includes("runtimeNote"),
+        && externalIngressSource.includes("service-worker-direct")
+        && externalIngressSource.includes("serviceUsesSidecarOperatorApi")
+        && devServerSource.includes("startIngressReplayServiceWorker"),
     ingressSupportsStandaloneReplayServiceMode: externalIngressSource.includes("standalone-service")
-        && externalIngressSource.includes("usesStandaloneBackgroundReplayService")
-        && ingressReplayWorkerSource.includes("managedBySidecar")
+        && externalIngressSource.includes("standalone-worker-direct")
+        && ingressReplayWorkerSource.includes("standalone-worker")
         && devServerSource.includes("usesSidecarManagedBackgroundReplayService"),
-    ingressSupportsOperatorPauseResume: externalIngressSource.includes("backgroundReplayControlPath")
+    ingressSupportsOperatorPauseResume: ingressReplayStoreSource.includes("backgroundReplayControlPath")
         && externalIngressSource.includes("pauseBackgroundReplay")
         && externalIngressSource.includes("resumeBackgroundReplay")
         && externalIngressSource.includes("isBackgroundReplayPaused"),
-    ingressReplayWorkerPollsOperatorApi: ingressReplayWorkerSource.includes("/ingress/get-replay-queue")
-        && ingressReplayWorkerSource.includes("/ingress/replay-queue/replay")
-        && ingressReplayWorkerSource.includes("getBackgroundReplayServiceStatusPath")
-        && ingressReplayWorkerSource.includes("replayQueue?.worker?.paused === true"),
+    ingressReplayWorkerUsesSharedStoreDirectly: ingressReplayWorkerSource.includes("IngressReplayStore")
+        && ingressReplayWorkerSource.includes("executeReplyDelivery")
+        && ingressReplayWorkerSource.includes("claimReplayQueueEntry")
+        && ingressReplayWorkerSource.includes("mutateReplayQueue")
+        && !ingressReplayWorkerSource.includes("/ingress/get-replay-queue")
+        && !ingressReplayWorkerSource.includes("/ingress/replay-queue/replay"),
     headlessRepliesPersistOnFinish: devServerSource.includes("persistHeadlessSessionRender")
         && devServerSource.includes("setConversationRender")
         && devServerSource.includes("saveConversation(current.conversationId)"),
@@ -109,6 +127,10 @@ const checks = {
     docExplainsTeamsWorkflowWebhook: ingressDocSource.includes("teams-webhook")
         && ingressDocSource.includes("Teams workflow webhook")
         && ingressDocSource.includes("text` payload"),
+    docExplainsSharedQueueOwnership: ingressDocSource.includes("shared runtime store")
+        && ingressDocSource.includes("直接读取 shared replay queue")
+        && ingressDocSource.includes("latestReceipt")
+        && ingressDocSource.includes("processing"),
     docExplainsReplayOperatorSurface: ingressDocSource.includes("external-ingress-replay-queue.json")
         && ingressDocSource.includes("/ingress/get-replay-queue")
         && ingressDocSource.includes("/ingress/replay-queue/replay")
