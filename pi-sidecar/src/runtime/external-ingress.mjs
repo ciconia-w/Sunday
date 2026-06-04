@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHmac, randomUUID } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 
@@ -25,18 +25,49 @@ function normalizeHeaderMap(value) {
     );
 }
 
+function normalizeNonNegativeInteger(value, fallback) {
+    const parsed = Number.parseInt(String(value ?? ""), 10);
+    return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
+}
+
+function normalizeRetryDelays(value, fallback) {
+    if (typeof value !== "string" || !value.trim()) {
+        return fallback;
+    }
+
+    const normalized = value
+        .split(",")
+        .map((item) => normalizeNonNegativeInteger(item, -1))
+        .filter((item) => item >= 0);
+
+    return normalized.length > 0 ? normalized : fallback;
+}
+
+function normalizeReplyTransport(value) {
+    const normalized = typeof value === "string" ? value.trim() : "";
+    if (!normalized) {
+        return "";
+    }
+
+    if (normalized === "feishu-bot-webhook") {
+        return "lark-bot-webhook";
+    }
+
+    return normalized;
+}
+
 function normalizeReplyTarget(body) {
-    const replyTransport = typeof body?.replyTransport === "string" ? body.replyTransport.trim() : "";
+    const replyTransport = normalizeReplyTransport(body?.replyTransport);
     const replyWebhookUrl = typeof body?.replyWebhookUrl === "string" ? body.replyWebhookUrl.trim() : "";
 
     if (!replyWebhookUrl) {
-        if (replyTransport && replyTransport !== "webhook") {
-            throw new Error(`Unsupported replyTransport: ${replyTransport}`);
+        if (replyTransport) {
+            throw new Error(`replyWebhookUrl is required for replyTransport=${replyTransport}`);
         }
         return null;
     }
 
-    if (replyTransport && replyTransport !== "webhook") {
+    if (replyTransport && !["webhook", "lark-bot-webhook"].includes(replyTransport)) {
         throw new Error(`Unsupported replyTransport: ${replyTransport}`);
     }
 
@@ -51,10 +82,16 @@ function normalizeReplyTarget(body) {
         throw new Error("replyWebhookUrl must use http or https");
     }
 
+    const transport = replyTransport || "webhook";
+    const secret = typeof body?.replyWebhookSecret === "string" && body.replyWebhookSecret.trim()
+        ? body.replyWebhookSecret.trim()
+        : "";
+
     return {
-        transport: "webhook",
+        transport,
         url: parsedUrl.toString(),
         headers: normalizeHeaderMap(body?.replyWebhookHeaders),
+        secret: transport === "lark-bot-webhook" ? secret : "",
     };
 }
 
@@ -66,10 +103,45 @@ function collectRenderText(renderItems) {
         .trim();
 }
 
+function sanitizeReplyTarget(replyTarget) {
+    if (!replyTarget || typeof replyTarget !== "object") {
+        return {};
+    }
+
+    return {
+        transport: replyTarget.transport ?? "",
+        url: replyTarget.url ?? "",
+        hasSecret: Boolean(replyTarget.secret),
+        headerKeys: Object.keys(replyTarget.headers ?? {}),
+    };
+}
+
+function formatLarkReplyText(payload) {
+    if (payload?.ok === true) {
+        return typeof payload?.assistantText === "string" && payload.assistantText.trim()
+            ? payload.assistantText.trim()
+            : "Sunday 已完成处理，但没有生成文本回复。";
+    }
+
+    const errorText = typeof payload?.error === "string" && payload.error.trim()
+        ? payload.error.trim()
+        : "unknown error";
+    return `Sunday 处理失败：${errorText}`;
+}
+
+function wait(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 export class ExternalIngress {
     constructor(options) {
         this.options = options;
         this.routeStorePath = resolve(options.runtimeDir, "external-ingress-routes.json");
+        this.deadLetterPath = resolve(options.runtimeDir, "external-ingress-dead-letters.json");
+        this.replyRetryDelaysMs = normalizeRetryDelays(
+            process.env.PERSONAL_AGENT_INGRESS_REPLY_RETRY_DELAYS_MS,
+            [1000, 3000],
+        );
         this.routeTargets = new Map();
         this.sessionQueues = new Map();
         this.activeSessionJobs = new Map();
@@ -163,6 +235,21 @@ export class ExternalIngress {
             updatedAt: new Date().toISOString(),
         });
         await this.saveRouteTargets();
+    }
+
+    async appendDeadLetter(entry) {
+        let existingEntries = [];
+        try {
+            const raw = await readFile(this.deadLetterPath, "utf8");
+            const parsed = JSON.parse(raw);
+            existingEntries = Array.isArray(parsed?.entries) ? parsed.entries : [];
+        } catch {
+            existingEntries = [];
+        }
+
+        await mkdir(dirname(this.deadLetterPath), { recursive: true });
+        existingEntries.push(entry);
+        await writeFile(this.deadLetterPath, JSON.stringify({ entries: existingEntries }, null, 2));
     }
 
     getRouteIdentity(body) {
@@ -293,7 +380,7 @@ export class ExternalIngress {
         const renderItems = Array.isArray(parsed?.renderItems) ? parsed.renderItems : [];
         const assistantText = collectRenderText(renderItems);
 
-        return this.postReply(job.replyTarget, {
+        return this.deliverReply(job.replyTarget, {
             ok: true,
             transport: job.replyTarget.transport,
             source: job.source,
@@ -324,7 +411,7 @@ export class ExternalIngress {
 
         const parsed = typeof message === "string" ? JSON.parse(message) : message ?? {};
 
-        return this.postReply(job.replyTarget, {
+        return this.deliverReply(job.replyTarget, {
             ok: false,
             transport: job.replyTarget.transport,
             source: job.source,
@@ -342,11 +429,35 @@ export class ExternalIngress {
         });
     }
 
-    async postReply(replyTarget, payload) {
-        if (replyTarget.transport !== "webhook") {
-            throw new Error(`Unsupported reply transport: ${replyTarget.transport}`);
+    createLarkBotSignature(secret) {
+        const timestamp = String(Math.floor(Date.now() / 1000));
+        const stringToSign = `${timestamp}\n${secret}`;
+        const sign = createHmac("sha256", stringToSign).digest("base64");
+
+        return {
+            timestamp,
+            sign,
+        };
+    }
+
+    buildLarkBotReplyBody(replyTarget, payload) {
+        const body = {
+            msg_type: "text",
+            content: {
+                text: formatLarkReplyText(payload),
+            },
+        };
+
+        if (replyTarget.secret) {
+            const signature = this.createLarkBotSignature(replyTarget.secret);
+            body.timestamp = signature.timestamp;
+            body.sign = signature.sign;
         }
 
+        return body;
+    }
+
+    async postGenericWebhookReply(replyTarget, payload) {
         const response = await fetch(replyTarget.url, {
             method: "POST",
             headers: {
@@ -365,5 +476,90 @@ export class ExternalIngress {
             transport: replyTarget.transport,
             status: response.status,
         };
+    }
+
+    async postLarkBotWebhookReply(replyTarget, payload) {
+        const body = this.buildLarkBotReplyBody(replyTarget, payload);
+        const response = await fetch(replyTarget.url, {
+            method: "POST",
+            headers: {
+                "content-type": "application/json; charset=utf-8",
+                ...replyTarget.headers,
+            },
+            body: JSON.stringify(body),
+        });
+
+        if (!response.ok) {
+            throw new Error(`Lark bot webhook returned HTTP ${response.status}`);
+        }
+
+        return {
+            ok: true,
+            transport: replyTarget.transport,
+            status: response.status,
+            providerPayload: body,
+        };
+    }
+
+    async deliverReply(replyTarget, payload) {
+        const errors = [];
+        const maxAttempts = this.replyRetryDelaysMs.length + 1;
+
+        for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+            try {
+                const result = await this.postReply(replyTarget, payload);
+                return {
+                    ...result,
+                    attemptCount: attempt,
+                };
+            } catch (error) {
+                const errorMessage = error instanceof Error ? error.message : String(error);
+                errors.push({
+                    attempt,
+                    error: errorMessage,
+                    at: new Date().toISOString(),
+                });
+
+                if (attempt < maxAttempts) {
+                    await wait(this.replyRetryDelaysMs[attempt - 1] ?? 0);
+                    continue;
+                }
+            }
+        }
+
+        const deadLetterEntry = {
+            id: randomUUID(),
+            transport: replyTarget.transport ?? "",
+            routeKey: payload?.routeKey ?? "",
+            conversationId: payload?.conversationId ?? "",
+            sessionId: payload?.sessionId ?? "",
+            requestExternalMessageId: payload?.requestExternalMessageId ?? "",
+            replyTarget: sanitizeReplyTarget(replyTarget),
+            payload,
+            attemptCount: errors.length,
+            errors,
+            createdAt: new Date().toISOString(),
+        };
+        await this.appendDeadLetter(deadLetterEntry);
+
+        return {
+            ok: false,
+            transport: replyTarget.transport ?? "",
+            attemptCount: errors.length,
+            error: errors[errors.length - 1]?.error ?? "Reply delivery failed",
+            deadLetterId: deadLetterEntry.id,
+        };
+    }
+
+    async postReply(replyTarget, payload) {
+        if (replyTarget.transport === "webhook") {
+            return this.postGenericWebhookReply(replyTarget, payload);
+        }
+
+        if (replyTarget.transport === "lark-bot-webhook") {
+            return this.postLarkBotWebhookReply(replyTarget, payload);
+        }
+
+        throw new Error(`Unsupported reply transport: ${replyTarget.transport}`);
     }
 }
