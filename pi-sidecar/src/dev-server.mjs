@@ -213,6 +213,7 @@ function clearIngressReplayServiceRestartTimer() {
 }
 
 function getIngressReplayServiceSupervisorState() {
+    const managedBySidecar = externalIngress.usesSidecarManagedBackgroundReplayService();
     return {
         running: Boolean(
             ingressReplayService.child
@@ -222,6 +223,8 @@ function getIngressReplayServiceSupervisorState() {
         pid: ingressReplayService.child?.pid ?? 0,
         restartCount: ingressReplayService.restartCount,
         lastError: ingressReplayService.lastError,
+        manager: managedBySidecar ? "sidecar" : "none",
+        managedBySidecar,
     };
 }
 
@@ -243,7 +246,7 @@ function stopIngressReplayServiceWorker() {
 }
 
 function startIngressReplayServiceWorker(baseUrl) {
-    if (!externalIngress.usesDedicatedBackgroundReplayService()) {
+    if (!externalIngress.usesSidecarManagedBackgroundReplayService()) {
         return;
     }
 

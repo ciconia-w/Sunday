@@ -93,6 +93,14 @@ QJsonObject defaultIngressOperatorState()
         {QStringLiteral("delaysMs"), QJsonArray()},
         {QStringLiteral("mode"), QStringLiteral("in-process")},
         {QStringLiteral("hasDedicatedReplayService"), false},
+        {QStringLiteral("deliveryPolicy"), QJsonObject{
+            {QStringLiteral("strategy"), QStringLiteral("fixed")},
+            {QStringLiteral("delaysMs"), QJsonArray()},
+            {QStringLiteral("maxAutomaticAttempts"), 0},
+            {QStringLiteral("initialDelayMs"), 0},
+            {QStringLiteral("maxDelayMs"), 0},
+            {QStringLiteral("multiplier"), 1},
+        }},
         {QStringLiteral("serviceStatus"), QJsonObject{
             {QStringLiteral("enabled"), false},
             {QStringLiteral("running"), false},
@@ -102,6 +110,8 @@ QJsonObject defaultIngressOperatorState()
             {QStringLiteral("lastHeartbeatAt"), QString()},
             {QStringLiteral("lastRunAt"), QString()},
             {QStringLiteral("lastError"), QString()},
+            {QStringLiteral("manager"), QStringLiteral("none")},
+            {QStringLiteral("managedBySidecar"), false},
         }},
     };
     QJsonObject replyRetryPolicy{
@@ -115,6 +125,7 @@ QJsonObject defaultIngressOperatorState()
         {QStringLiteral("supportedReplyTransports"), QJsonArray{
             QStringLiteral("webhook"),
             QStringLiteral("lark-bot-webhook"),
+            QStringLiteral("dingtalk-bot-webhook"),
             QStringLiteral("slack-webhook"),
             QStringLiteral("discord-webhook"),
         }},

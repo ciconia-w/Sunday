@@ -1,7 +1,9 @@
+import { spawn } from "node:child_process";
 import { createServer } from "node:http";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { getSidecarDir } from "./paths.mjs";
 import { withSidecarRuntime } from "./sidecar-verify-runtime.mjs";
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -109,30 +111,6 @@ async function waitForSessionFinish(events, sessionId, expectedFinishCount, time
     };
 }
 
-async function waitForCallCount(getCalls, expectedCount, timeoutMs = 15000) {
-    const deadline = Date.now() + timeoutMs;
-    while (Date.now() < deadline) {
-        const calls = getCalls();
-        if (calls.length >= expectedCount) {
-            return calls.slice(0, expectedCount);
-        }
-        await wait(250);
-    }
-    return getCalls();
-}
-
-async function waitForSuccessfulCall(getCalls, timeoutMs = 15000) {
-    const deadline = Date.now() + timeoutMs;
-    while (Date.now() < deadline) {
-        const call = [...getCalls()].reverse().find((item) => item.status === 200);
-        if (call) {
-            return call;
-        }
-        await wait(250);
-    }
-    return [...getCalls()].reverse().find((item) => item.status === 200) ?? null;
-}
-
 async function waitForOperatorState(baseUrl, predicate, timeoutMs = 15000) {
     const deadline = Date.now() + timeoutMs;
     let latest = null;
@@ -146,6 +124,18 @@ async function waitForOperatorState(baseUrl, predicate, timeoutMs = 15000) {
     }
 
     return latest;
+}
+
+async function waitForSuccessfulCall(getCalls, timeoutMs = 15000) {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+        const call = [...getCalls()].reverse().find((item) => item.status === 200);
+        if (call) {
+            return call;
+        }
+        await wait(250);
+    }
+    return [...getCalls()].reverse().find((item) => item.status === 200) ?? null;
 }
 
 async function withSlackCollector(run) {
@@ -205,12 +195,31 @@ async function withSlackCollector(run) {
     }
 }
 
-const runtimeDir = await mkdtemp(join(tmpdir(), "sunday-ingress-dedicated-replay-service-verify-"));
+function startStandaloneReplayWorker({ runtimeDir, sidecarPort }) {
+    return spawn("node", ["./src/runtime/ingress-replay-worker.mjs"], {
+        cwd: getSidecarDir(),
+        env: {
+            ...process.env,
+            PERSONAL_AGENT_RUNTIME_DIR: runtimeDir,
+            PERSONAL_AGENT_INGRESS_BACKGROUND_REPLAY_ENABLED: "1",
+            PERSONAL_AGENT_INGRESS_BACKGROUND_REPLAY_MODE: "standalone-service",
+            PERSONAL_AGENT_INGRESS_BACKGROUND_REPLAY_STRATEGY: "exponential",
+            PERSONAL_AGENT_INGRESS_BACKGROUND_REPLAY_INITIAL_DELAY_MS: "200",
+            PERSONAL_AGENT_INGRESS_BACKGROUND_REPLAY_MAX_DELAY_MS: "400",
+            PERSONAL_AGENT_INGRESS_BACKGROUND_REPLAY_MAX_ATTEMPTS: "3",
+            PERSONAL_AGENT_INGRESS_BACKGROUND_REPLAY_POLL_MS: "20",
+            PERSONAL_AGENT_INGRESS_REPLAY_SERVICE_BASE_URL: `http://127.0.0.1:${sidecarPort}`,
+        },
+        stdio: "ignore",
+    });
+}
+
+const runtimeDir = await mkdtemp(join(tmpdir(), "sunday-ingress-standalone-replay-service-verify-"));
 const statusPath = join(runtimeDir, "external-ingress-replay-service-status.json");
 const now = Date.now();
-const source = "im-replay-service-demo";
-const channelId = `replay-service-channel-${now}`;
-const threadId = `replay-service-thread-${now}`;
+const source = "im-standalone-replay-demo";
+const channelId = `standalone-replay-channel-${now}`;
+const threadId = `standalone-replay-thread-${now}`;
 
 try {
     let initialOperatorState = null;
@@ -224,29 +233,35 @@ try {
     await withSlackCollector(async ({ webhookUrl, getCalls, setDeliveryMode }) => {
         await withSidecarRuntime(
             {
-                sidecarPort: 8813,
+                sidecarPort: 8815,
                 env: {
                     PERSONAL_AGENT_RUNTIME_DIR: runtimeDir,
                     PERSONAL_AGENT_INGRESS_REPLY_RETRY_DELAYS_MS: "5,10",
                     PERSONAL_AGENT_INGRESS_BACKGROUND_REPLAY_ENABLED: "1",
-                    PERSONAL_AGENT_INGRESS_BACKGROUND_REPLAY_MODE: "service",
-                    PERSONAL_AGENT_INGRESS_BACKGROUND_REPLAY_DELAYS_MS: "60,120",
+                    PERSONAL_AGENT_INGRESS_BACKGROUND_REPLAY_MODE: "standalone-service",
+                    PERSONAL_AGENT_INGRESS_BACKGROUND_REPLAY_STRATEGY: "exponential",
+                    PERSONAL_AGENT_INGRESS_BACKGROUND_REPLAY_INITIAL_DELAY_MS: "200",
+                    PERSONAL_AGENT_INGRESS_BACKGROUND_REPLAY_MAX_DELAY_MS: "400",
+                    PERSONAL_AGENT_INGRESS_BACKGROUND_REPLAY_MAX_ATTEMPTS: "3",
                     PERSONAL_AGENT_INGRESS_BACKGROUND_REPLAY_POLL_MS: "20",
                 },
             },
             async ({ sidecarPort, sidecarPid }) => {
-                const baseUrl = `http://127.0.0.1:${sidecarPort}`;
                 observedSidecarPid = sidecarPid;
+                const worker = startStandaloneReplayWorker({ runtimeDir, sidecarPort });
+                const baseUrl = `http://127.0.0.1:${sidecarPort}`;
                 const collector = await createEventCollector(baseUrl);
 
                 try {
                     const readyOperatorState = await waitForOperatorState(
                         baseUrl,
                         (state) =>
-                            state?.backgroundReplay?.mode === "service"
+                            state?.backgroundReplay?.mode === "standalone-service"
+                            && state?.backgroundReplay?.deliveryPolicy?.strategy === "exponential"
                             && state?.backgroundReplay?.serviceStatus?.running === true
                             && Number(state?.backgroundReplay?.serviceStatus?.pid ?? 0) > 0
-                            && Number(state?.backgroundReplay?.serviceStatus?.pid ?? 0) !== sidecarPid,
+                            && Number(state?.backgroundReplay?.serviceStatus?.pid ?? 0) !== sidecarPid
+                            && state?.backgroundReplay?.serviceStatus?.managedBySidecar === false,
                     );
                     initialOperatorState = readyOperatorState?.body?.result ?? null;
 
@@ -256,81 +271,86 @@ try {
                         threadId,
                         userId: "demo-user",
                         assistantId: "uos-ai-generic",
-                        text: "Reply with exactly: ingress-replay-service-ok",
-                        externalMessageId: `replay-service-external-${now}`,
+                        text: "Reply with exactly: ingress-standalone-service-ok",
+                        externalMessageId: `standalone-replay-external-${now}`,
                         replyTransport: "slack-webhook",
                         replyWebhookUrl: webhookUrl,
                     });
 
-                    collector.watchedSessionIds.add(ingressResult.body.sessionId);
-                    const cycle = await waitForSessionFinish(collector.events, ingressResult.body.sessionId, 1);
+                    collector.watchedSessionIds.add(ingressResult.body?.sessionId);
+                    const cycle = await waitForSessionFinish(collector.events, ingressResult.body?.sessionId, 1);
                     if (!cycle.ok) {
-                        throw new Error(`dedicated replay service verifier session did not finish: ${cycle.reason}`);
+                        throw new Error(`standalone replay service verifier session did not finish: ${cycle.reason}`);
                     }
 
-                    await waitForCallCount(getCalls, 3);
+                    const pendingState = await waitForOperatorState(
+                        baseUrl,
+                        (state) => state?.replayQueue?.entries?.some((entry) =>
+                            entry.routeKey === `${source}:${channelId}:${threadId}` && entry.status === "pending"),
+                    );
+                    replayEntry = pendingState?.body?.result?.replayQueue?.entries?.find((entry) =>
+                        entry.routeKey === `${source}:${channelId}:${threadId}`);
+
                     setDeliveryMode("success");
+                    finalWebhookCall = await waitForSuccessfulCall(getCalls, 20000);
 
                     const deliveredState = await waitForOperatorState(
                         baseUrl,
-                        (state) => {
-                            const match = (state?.replayQueue?.entries ?? []).find(
-                                (entry) => entry.routeKey === `${source}:${channelId}:${threadId}`,
-                            );
-                            return match?.status === "delivered" && Number(match?.automaticReplayCount ?? 0) >= 1;
-                        },
-                        15000,
+                        (state) => state?.replayQueue?.entries?.some((entry) =>
+                            entry.routeKey === `${source}:${channelId}:${threadId}` && entry.status === "delivered"),
+                        20000,
                     );
-
                     operatorStateAfterDelivery = deliveredState?.body?.result ?? null;
-                    replayEntry = (operatorStateAfterDelivery?.replayQueue?.entries ?? []).find(
-                        (entry) => entry.routeKey === `${source}:${channelId}:${threadId}`,
-                    ) ?? null;
-                    finalWebhookCall = await waitForSuccessfulCall(getCalls);
                     serviceStatusFile = JSON.parse(await readFile(statusPath, "utf8"));
                 } finally {
                     await collector.close();
+                    if (!worker.killed) {
+                        worker.kill("SIGTERM");
+                    }
                 }
             },
         );
     });
 
+    const deliveredEntry = operatorStateAfterDelivery?.replayQueue?.entries?.find((entry) =>
+        entry.routeKey === `${source}:${channelId}:${threadId}`) ?? null;
     const serviceStatus = operatorStateAfterDelivery?.backgroundReplay?.serviceStatus ?? null;
     const checks = {
-        ingressAccepted: ingressResult?.body?.ok === true,
-        operatorStateUsesServiceMode: initialOperatorState?.backgroundReplay?.mode === "service",
-        serviceReportedAsDedicated: initialOperatorState?.backgroundReplay?.hasDedicatedReplayService === true,
-        operatorStateUsesFixedStrategy: initialOperatorState?.backgroundReplay?.deliveryPolicy?.strategy === "fixed",
-        serviceManagedBySidecar: initialOperatorState?.backgroundReplay?.serviceStatus?.managedBySidecar === true
-            && initialOperatorState?.backgroundReplay?.serviceStatus?.manager === "sidecar",
+        ingressAccepted: ingressResult?.status === 200 && ingressResult?.body?.ok === true,
+        operatorStateUsesStandaloneMode: initialOperatorState?.backgroundReplay?.mode === "standalone-service",
+        operatorStateUsesExponentialStrategy: initialOperatorState?.backgroundReplay?.deliveryPolicy?.strategy === "exponential"
+            && Number(initialOperatorState?.backgroundReplay?.deliveryPolicy?.multiplier ?? 0) >= 2,
+        serviceManagedExternally: initialOperatorState?.backgroundReplay?.serviceStatus?.managedBySidecar === false
+            && initialOperatorState?.backgroundReplay?.serviceStatus?.manager === "external",
         servicePidDiffersFromSidecar: Number(initialOperatorState?.backgroundReplay?.serviceStatus?.pid ?? 0) > 0
             && Number(initialOperatorState?.backgroundReplay?.serviceStatus?.pid ?? 0) !== observedSidecarPid,
+        replayEntryCreated: replayEntry?.status === "pending",
+        replayDelivered: deliveredEntry?.status === "delivered",
+        replayUsedAutomaticPath: Number(deliveredEntry?.automaticReplayCount ?? 0) >= 1,
         serviceRunning: serviceStatus?.running === true,
-        replayEntryDelivered: replayEntry?.status === "delivered",
-        replayEntryWasAutoRetried: Number(replayEntry?.automaticReplayCount ?? 0) >= 1,
-        finalWebhookCallSucceeded: finalWebhookCall?.status === 200,
-        finalWebhookCallContainsSlackText: finalWebhookCall?.body?.text === "ingress-replay-service-ok",
-        statusFileTracksSidecarManager: serviceStatusFile?.managedBySidecar === true
-            && serviceStatusFile?.manager === "sidecar",
+        statusFileTracksExternalManager: serviceStatusFile?.managedBySidecar === false
+            && serviceStatusFile?.manager === "external",
         statusFileTracksHeartbeat: typeof serviceStatusFile?.lastHeartbeatAt === "string" && Boolean(serviceStatusFile.lastHeartbeatAt),
         statusFileTracksRun: typeof serviceStatusFile?.lastRunAt === "string" && Boolean(serviceStatusFile.lastRunAt),
+        finalWebhookCallUsesSlackShape: finalWebhookCall?.body?.text === "ingress-standalone-service-ok",
     };
 
     const verdict = Object.values(checks).every(Boolean)
-        ? "ingress-dedicated-replay-service-api-confirmed"
-        : "ingress-dedicated-replay-service-api-incomplete";
+        ? "ingress-standalone-replay-service-api-confirmed"
+        : "ingress-standalone-replay-service-api-incomplete";
 
     console.log(JSON.stringify({
+        ingressResult,
         initialOperatorState,
-        operatorStateAfterDelivery,
         replayEntry,
-        finalWebhookCall,
+        operatorStateAfterDelivery,
         serviceStatusFile,
+        finalWebhookCall,
         checks,
         verdict,
     }, null, 2));
 
-    process.exit(verdict === "ingress-dedicated-replay-service-api-confirmed" ? 0 : 1);
+    process.exit(verdict === "ingress-standalone-replay-service-api-confirmed" ? 0 : 1);
 } finally {
     await rm(runtimeDir, { recursive: true, force: true });
 }

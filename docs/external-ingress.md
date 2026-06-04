@@ -111,6 +111,24 @@ Sunday 当前提供一个 sidecar 级别的外部消息入站协议：
 - 不额外引入 secret / 签名字段
 - 继续复用相同的 route store
 
+### Provider-specific adapter: DingTalk custom bot webhook
+
+当前还支持一条 DingTalk reply transport：
+
+- `replyTransport = dingtalk-bot-webhook`
+- `replyTransport = dingtalk-webhook` / `dingtalk-custom-bot-webhook`（兼容别名，内部会归一化为 `dingtalk-bot-webhook`）
+- `replyWebhookUrl = https://oapi.dingtalk.com/robot/send?...`
+- `replyWebhookSecret = ...`（可选；启用自定义机器人的加签校验时需要）
+
+这条 adapter 会把 Sunday 的 reply 转成 DingTalk custom bot 的最小 `text` 消息体，并在提供 `replyWebhookSecret` 时自动补 `timestamp + sign` query。
+
+当前保持最小实现：
+
+- 成功时发送 assistant 文本
+- 失败时发送 `Sunday 处理失败：...`
+- 不引入前端配置面
+- 继续复用相同的 route store
+
 ### Provider-specific adapter: Discord webhook
 
 当前还支持一条 Discord reply transport：
@@ -181,7 +199,7 @@ Sunday 当前提供一个 sidecar 级别的外部消息入站协议：
 约束：
 
 - 当前只支持 `http` / `https` webhook
-- 当前 provider-specific transport 已覆盖飞书/Lark、Slack 和 Discord 的最小 webhook reply adapter
+- 当前 provider-specific transport 已覆盖飞书/Lark、Slack、DingTalk 和 Discord 的最小 webhook reply adapter
 - 更复杂的 IM 平台桥接应继续叠在 generic webhook / lark bot webhook 这层 adapter 之上
 
 ## Delivery Reliability
@@ -212,7 +230,6 @@ reply queue 会额外保留：
 
 当前还没有：
 
-- 指数退避策略
 - 平台专属回执确认
 
 ## Background Replay
@@ -231,13 +248,19 @@ reply queue 现在已经有最小 background replay worker。
 
 - `PERSONAL_AGENT_INGRESS_BACKGROUND_REPLAY_ENABLED`
 - `PERSONAL_AGENT_INGRESS_BACKGROUND_REPLAY_MODE`
+- `PERSONAL_AGENT_INGRESS_BACKGROUND_REPLAY_STRATEGY`
 - `PERSONAL_AGENT_INGRESS_BACKGROUND_REPLAY_DELAYS_MS`
+- `PERSONAL_AGENT_INGRESS_BACKGROUND_REPLAY_INITIAL_DELAY_MS`
+- `PERSONAL_AGENT_INGRESS_BACKGROUND_REPLAY_MAX_DELAY_MS`
+- `PERSONAL_AGENT_INGRESS_BACKGROUND_REPLAY_MAX_ATTEMPTS`
+- `PERSONAL_AGENT_INGRESS_BACKGROUND_REPLAY_BACKOFF_MULTIPLIER`
 - `PERSONAL_AGENT_INGRESS_BACKGROUND_REPLAY_POLL_MS`
 
-当前支持两种模式：
+当前支持三种模式：
 
 - `in-process`：worker 运行在 sidecar 进程内
-- `service`：worker 运行在独立 replay service 子进程中，但 queue / route 的所有权仍保留在 sidecar
+- `service`：worker 运行在 sidecar 管理的 dedicated replay service 子进程中
+- `standalone-service`：worker 运行在 sidecar 外部的独立进程中，但 queue / route 的所有权仍保留在 sidecar
 
 当 `PERSONAL_AGENT_INGRESS_BACKGROUND_REPLAY_MODE=service` 时：
 
@@ -246,11 +269,33 @@ reply queue 现在已经有最小 background replay worker。
 - service heartbeat 会写入 runtime 目录下的：
   - `external-ingress-replay-service-status.json`
 
+当 `PERSONAL_AGENT_INGRESS_BACKGROUND_REPLAY_MODE=standalone-service` 时：
+
+- sidecar 不再托管 worker 子进程
+- 外部 replay service 仍通过 sidecar operator API 轮询 queue 并执行自动重放
+- service heartbeat 同样会写入：
+  - `external-ingress-replay-service-status.json`
+
+最小启动方式示例：
+
+```bash
+cd /home/aaa/personal-agent-desktop/pi-sidecar
+PERSONAL_AGENT_RUNTIME_DIR=/path/to/runtime \
+PERSONAL_AGENT_INGRESS_BACKGROUND_REPLAY_ENABLED=1 \
+PERSONAL_AGENT_INGRESS_BACKGROUND_REPLAY_MODE=standalone-service \
+PERSONAL_AGENT_INGRESS_REPLAY_SERVICE_BASE_URL=http://127.0.0.1:8787 \
+node ./src/runtime/ingress-replay-worker.mjs
+```
+
+background replay 当前支持两类 delivery policy：
+
+- `fixed`：按 `PERSONAL_AGENT_INGRESS_BACKGROUND_REPLAY_DELAYS_MS` 使用固定 delay
+- `exponential`：按 `INITIAL_DELAY_MS / MAX_DELAY_MS / MAX_ATTEMPTS / BACKOFF_MULTIPLIER` 计算指数退避
+
 当前这个 dedicated replay service 仍然是最小实现：
 
-- 不是独立部署服务，而是 sidecar 管理的 worker 子进程
 - 没有 UI 级 pause / resume / replay history
-- delivery policy 仍是固定 delay，不是指数退避
+- queue / route 的真实所有权仍保留在 sidecar，不是完全自持久化的独立服务
 
 ## Operator Surface
 

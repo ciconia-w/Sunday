@@ -1,6 +1,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import {
+    backgroundReplayModeUsesDedicatedService,
     getBackgroundReplayServiceStatusPath,
     normalizeBackgroundReplayMode,
 } from "./external-ingress.mjs";
@@ -62,7 +63,7 @@ const pollMs = Math.max(
 );
 const statusPath = getBackgroundReplayServiceStatusPath(runtimeDir);
 
-if (!backgroundReplayEnabled || backgroundReplayMode !== "service") {
+if (!backgroundReplayEnabled || !backgroundReplayModeUsesDedicatedService(backgroundReplayMode)) {
     process.exit(0);
 }
 
@@ -79,6 +80,8 @@ const state = {
     lastHeartbeatAt: "",
     lastRunAt: "",
     lastError: "",
+    manager: backgroundReplayMode === "service" ? "sidecar" : "external",
+    managedBySidecar: backgroundReplayMode === "service",
 };
 
 async function persistStatus(partial = {}) {

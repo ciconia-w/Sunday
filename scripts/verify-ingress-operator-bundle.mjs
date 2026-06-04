@@ -19,12 +19,18 @@ const markers = [
     "标记已处理",
     "忽略",
     "Sidecar In-Process Worker",
+    "Standalone Replay Service",
     "Discord",
+    "DingTalk",
     "Worker 状态",
+    "退避策略",
+    "Fixed Delays",
+    "Exponential Backoff",
     "最近心跳",
     "查看 reply route、replay queue 和当前 delivery policy。",
     "data-ingress-operator-service-runtime",
     "data-ingress-operator-service-heartbeat",
+    "data-ingress-operator-delivery-strategy",
 ];
 
 const present = Object.fromEntries(markers.map((marker) => [marker, bundle.includes(marker)]));

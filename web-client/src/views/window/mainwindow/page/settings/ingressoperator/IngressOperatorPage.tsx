@@ -83,6 +83,14 @@ interface IngressOperatorState {
         delaysMs: number[];
         mode: string;
         hasDedicatedReplayService: boolean;
+        deliveryPolicy: {
+            strategy: string;
+            delaysMs: number[];
+            maxAutomaticAttempts: number;
+            initialDelayMs: number;
+            maxDelayMs: number;
+            multiplier: number;
+        };
         serviceStatus: {
             enabled: boolean;
             running: boolean;
@@ -92,6 +100,8 @@ interface IngressOperatorState {
             lastHeartbeatAt: string;
             lastRunAt: string;
             lastError: string;
+            manager: string;
+            managedBySidecar: boolean;
         };
     };
     runtimeNote: string;
@@ -115,7 +125,7 @@ const createDefaultOperatorState = (): IngressOperatorState => ({
         },
         entries: [],
     },
-    supportedReplyTransports: ["webhook", "lark-bot-webhook", "slack-webhook", "discord-webhook"],
+    supportedReplyTransports: ["webhook", "lark-bot-webhook", "dingtalk-bot-webhook", "slack-webhook", "discord-webhook"],
     replyRetryPolicy: {
         maxAttempts: 1,
         delaysMs: [],
@@ -126,6 +136,14 @@ const createDefaultOperatorState = (): IngressOperatorState => ({
         delaysMs: [],
         mode: "in-process",
         hasDedicatedReplayService: false,
+        deliveryPolicy: {
+            strategy: "fixed",
+            delaysMs: [],
+            maxAutomaticAttempts: 0,
+            initialDelayMs: 0,
+            maxDelayMs: 0,
+            multiplier: 1,
+        },
         serviceStatus: {
             enabled: false,
             running: false,
@@ -135,6 +153,8 @@ const createDefaultOperatorState = (): IngressOperatorState => ({
             lastHeartbeatAt: "",
             lastRunAt: "",
             lastError: "",
+            manager: "none",
+            managedBySidecar: false,
         },
     },
     runtimeNote: "当前没有可用的 ingress operator 状态。",
@@ -164,6 +184,10 @@ function normalizeTransportLabel(transport: string) {
 
     if (transport === "slack-webhook") {
         return "Slack";
+    }
+
+    if (transport === "dingtalk-bot-webhook") {
+        return "DingTalk";
     }
 
     if (transport === "webhook") {
@@ -221,6 +245,10 @@ export default defineComponent({
                     backgroundReplay: {
                         ...createDefaultOperatorState().backgroundReplay,
                         ...(state?.backgroundReplay || {}),
+                        deliveryPolicy: {
+                            ...createDefaultOperatorState().backgroundReplay.deliveryPolicy,
+                            ...(state?.backgroundReplay?.deliveryPolicy || {}),
+                        },
                         serviceStatus: {
                             ...createDefaultOperatorState().backgroundReplay.serviceStatus,
                             ...(state?.backgroundReplay?.serviceStatus || {}),
@@ -315,10 +343,24 @@ export default defineComponent({
         const headerSubtitleText = computed(() => "查看 reply route、replay queue 和当前 delivery policy。");
         const refreshButtonText = computed(() => isLoading.value ? "刷新中..." : "刷新状态");
         const workerModeText = computed(() =>
-            operatorState.value.backgroundReplay.hasDedicatedReplayService
+            operatorState.value.backgroundReplay.mode === "standalone-service"
+                ? "Standalone Replay Service"
+                : operatorState.value.backgroundReplay.hasDedicatedReplayService
                 ? "Dedicated Replay Service"
                 : "Sidecar In-Process Worker",
         );
+        const deliveryStrategyText = computed(() => {
+            if (!operatorState.value.backgroundReplay.enabled) {
+                return "未启用";
+            }
+
+            const policy = operatorState.value.backgroundReplay.deliveryPolicy;
+            if (policy.strategy === "exponential") {
+                return `Exponential Backoff x${policy.multiplier}`;
+            }
+
+            return "Fixed Delays";
+        });
         const supportedTransportText = computed(() =>
             operatorState.value.supportedReplyTransports.map(normalizeTransportLabel).join(" / "),
         );
@@ -411,6 +453,7 @@ export default defineComponent({
             formatTimeLabel,
             formatDelayList,
             normalizeTransportLabel,
+            deliveryStrategyText,
             loadOperatorState,
             handleReplayEntry,
             handleResolveEntry,
@@ -488,6 +531,10 @@ export default defineComponent({
                                                         ? `${this.formatDelayList(this.operatorState.backgroundReplay.delaysMs)} / ${Math.max(1, Math.round(this.operatorState.backgroundReplay.pollMs / 1000))}s 轮询`
                                                         : "未启用"}
                                                 </div>
+                                            </div>
+                                            <div class="ingress-operator-page__fact-item" data-ingress-operator-delivery-strategy>
+                                                <div class="ingress-operator-page__fact-label">退避策略</div>
+                                                <div class="ingress-operator-page__fact-value">{this.deliveryStrategyText}</div>
                                             </div>
                                             <div class="ingress-operator-page__fact-item" data-ingress-operator-service-runtime>
                                                 <div class="ingress-operator-page__fact-label">Worker 状态</div>
