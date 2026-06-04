@@ -48,6 +48,7 @@
     "verify:ingress-dedicated-replay-service-api": "node ./scripts/verify-ingress-dedicated-replay-service-api.mjs",
     "verify:ingress-standalone-replay-service-api": "node ./scripts/verify-ingress-standalone-replay-service-api.mjs",
     "verify:ingress-discord-api": "node ./scripts/verify-ingress-discord-api.mjs",
+    "verify:ingress-teams-api": "node ./scripts/verify-ingress-teams-api.mjs",
     "verify:ingress-dingtalk-api": "node ./scripts/verify-ingress-dingtalk-api.mjs",
     "verify:ingress-lark-api": "node ./scripts/verify-ingress-lark-api.mjs",
     "verify:ingress-operator-api": "node ./scripts/verify-ingress-operator-api.mjs",

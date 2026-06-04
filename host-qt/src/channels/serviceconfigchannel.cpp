@@ -137,6 +137,7 @@ QJsonObject defaultIngressOperatorState()
             QStringLiteral("dingtalk-bot-webhook"),
             QStringLiteral("slack-webhook"),
             QStringLiteral("discord-webhook"),
+            QStringLiteral("teams-webhook"),
         }},
         {QStringLiteral("replyRetryPolicy"), replyRetryPolicy},
         {QStringLiteral("backgroundReplay"), backgroundReplay},

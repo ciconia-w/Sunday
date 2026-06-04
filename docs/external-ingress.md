@@ -146,6 +146,23 @@ Sunday 当前提供一个 sidecar 级别的外部消息入站协议：
 - 不额外引入 secret / 签名字段
 - 继续复用相同的 route store
 
+### Provider-specific adapter: Teams workflow webhook
+
+当前还支持一条 Teams reply transport：
+
+- `replyTransport = teams-webhook`
+- `replyTransport = teams-incoming-webhook` / `msteams-webhook` / `microsoft-teams-webhook`（兼容别名，内部会归一化为 `teams-webhook`）
+- `replyWebhookUrl = https://...`（Teams Workflows 生成的 webhook URL）
+
+这条 adapter 会把 Sunday 的 reply 转成 Teams workflow webhook 可接收的最小 `text` payload。
+
+当前保持最小实现：
+
+- 成功时发送 assistant 文本
+- 失败时发送 `Sunday 处理失败：...`
+- 不额外引入 secret / 签名字段
+- 继续复用相同的 route store
+
 ## Reply Webhook Payload
 
 成功回推示例：
@@ -199,7 +216,7 @@ Sunday 当前提供一个 sidecar 级别的外部消息入站协议：
 约束：
 
 - 当前只支持 `http` / `https` webhook
-- 当前 provider-specific transport 已覆盖飞书/Lark、Slack、DingTalk 和 Discord 的最小 webhook reply adapter
+- 当前 provider-specific transport 已覆盖飞书/Lark、Slack、DingTalk、Discord 和 Teams workflow webhook 的最小 reply adapter
 - 更复杂的 IM 平台桥接应继续叠在 generic webhook / lark bot webhook 这层 adapter 之上
 
 ## Delivery Reliability
@@ -504,6 +521,20 @@ npm run verify:ingress-discord-api
 
 - `discord-webhook` / `discord-incoming-webhook` transport
 - provider payload 使用 `content`
+- route store 中的 transport 归一化
+- follow-up 不重复携带 webhook 仍可复用已持久化 route
+
+Teams verifier：
+
+```bash
+cd <repo-root>
+npm run verify:ingress-teams-api
+```
+
+这条 verifier 当前会验证：
+
+- `teams-webhook` / `teams-incoming-webhook` transport
+- provider payload 使用最小 `text` body
 - route store 中的 transport 归一化
 - follow-up 不重复携带 webhook 仍可复用已持久化 route
 

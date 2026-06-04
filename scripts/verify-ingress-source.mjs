@@ -37,6 +37,9 @@ const checks = {
     ingressSupportsDiscordWebhookTransport: externalIngressSource.includes("discord-webhook")
         && externalIngressSource.includes("buildDiscordReplyBody")
         && externalIngressSource.includes("postDiscordWebhookReply"),
+    ingressSupportsTeamsWebhookTransport: externalIngressSource.includes("teams-webhook")
+        && externalIngressSource.includes("buildTeamsReplyBody")
+        && externalIngressSource.includes("postTeamsWebhookReply"),
     ingressPushesReplyOnFinish: externalIngressSource.includes("handleSessionFinished")
         && externalIngressSource.includes("postReply"),
     ingressPushesErrorOnFailure: externalIngressSource.includes("handleSessionError")
@@ -103,6 +106,9 @@ const checks = {
     docExplainsDiscordAndReplayService: ingressDocSource.includes("discord-webhook")
         && ingressDocSource.includes("PERSONAL_AGENT_INGRESS_BACKGROUND_REPLAY_MODE")
         && ingressDocSource.includes("external-ingress-replay-service-status.json"),
+    docExplainsTeamsWorkflowWebhook: ingressDocSource.includes("teams-webhook")
+        && ingressDocSource.includes("Teams workflow webhook")
+        && ingressDocSource.includes("text` payload"),
     docExplainsReplayOperatorSurface: ingressDocSource.includes("external-ingress-replay-queue.json")
         && ingressDocSource.includes("/ingress/get-replay-queue")
         && ingressDocSource.includes("/ingress/replay-queue/replay")
