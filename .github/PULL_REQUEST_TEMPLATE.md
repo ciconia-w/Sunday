@@ -9,8 +9,9 @@ Describe why this change exists.
 ## Verification
 
 - [ ] `npm run verify:repo`
-- [ ] `cd web-client && npm run type-check`
+- [ ] `npm run verify:mvp`
 - [ ] Targeted `npm run verify:*` scripts
+- [ ] `cd web-client && npm run type-check` if touching existing type debt or type-check gating changes
 
 ## Risks
 

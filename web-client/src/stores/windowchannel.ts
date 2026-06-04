@@ -4,6 +4,7 @@ import { useAppUpdateStore } from "./appUpdate";
 import { useMainWindowStore } from "./mainwindow";
 import { useNotifyStore } from "./notify";
 import { MAIN_WINDOW_WORKSPACE_PAGES } from "@/types/mainwindow";
+import { debugUiLog } from "@/utils/debugLogging";
 
 export const useWindowChannelStore = defineStore("windowChannel", {
     state: () => ({
@@ -36,7 +37,7 @@ export const useWindowChannelStore = defineStore("windowChannel", {
             if (windowChannel["windowModeChanged"]) {
                 windowChannel["windowModeChanged"].connect((mode: number) => {
                     this.windowMode = mode as WindowMode;
-                    console.log("window mode change to:", this.windowMode);
+                    debugUiLog("window mode change to:", this.windowMode);
                 });
             }
 
@@ -57,18 +58,18 @@ export const useWindowChannelStore = defineStore("windowChannel", {
                     const mainWindowStore = useMainWindowStore();
                     // 如果已经在数字人页面，不需要切换
                     if (mainWindowStore.workspacePage === MAIN_WINDOW_WORKSPACE_PAGES.DIGITAL_HUMAN) {
-                        console.log("windowChangeToDigitalMode signal received, already on digital human page");
+                        debugUiLog("windowChangeToDigitalMode signal received, already on digital human page");
                         return;
                     }
                     mainWindowStore.toggleDigitalHumanPage();
-                    console.log("windowChangeToDigitalMode signal received, switching to digital human page");
+                    debugUiLog("windowChangeToDigitalMode signal received, switching to digital human page");
                 });
             }
 
             // 监听 windowAppendPrompt 信号
             if (windowChannel["windowAppendPrompt"]) {
                 windowChannel["windowAppendPrompt"].connect((question: string, isSend: boolean) => {
-                    console.log("windowAppendPrompt signal received:", question, isSend);
+                    debugUiLog("windowAppendPrompt signal received:", question, isSend);
                     this.setPendingPrompt(question, isSend);
                 });
             }
@@ -76,7 +77,7 @@ export const useWindowChannelStore = defineStore("windowChannel", {
             // 监听 toastRequested 信号
             if (windowChannel["toastRequested"]) {
                 windowChannel["toastRequested"].connect((type: string, message: string) => {
-                    console.log("toastRequested signal received:", type, message);
+                    debugUiLog("toastRequested signal received:", type, message);
                     const notifyStore = useNotifyStore();
                     notifyStore.showToast({ type: type as any, message });
                 });

@@ -21,6 +21,7 @@ import { WindowMode } from "@/types/windowinfo";
 import { FileEvent } from "@/types/uploadfile";
 import { getMainWindowWorkspacePage } from "@/utils/mainwindow/workspacePages";
 import { MAIN_WINDOW_WORKSPACE_PAGES } from "@/types/mainwindow";
+import { debugUiLog, isSmokeVerificationMode } from "@/utils/debugLogging";
 
 import MainWindow from "@/views/window/mainwindow/MainWindow";
 import MiniWindow from "@/views/window/minwindow/MiniWindow";
@@ -37,22 +38,8 @@ export default defineComponent({
     setup() {
         ensureBuiltInWorkspacePagesRegistered();
 
-        const shouldLogSmokeDetails = () => {
-            const params = new URL(window.location.href).searchParams;
-            return (
-                params.has("autoInjectFile") ||
-                params.has("autoOpenRecentConversation") ||
-                params.has("autoOpenToolFile") ||
-                params.has("autoCopyToolPath") ||
-                params.has("autoCopyToolCommand") ||
-                params.has("autoOpenFullOutput") ||
-                params.has("autoFollowUp") ||
-                params.has("autoOpenBranch")
-            );
-        };
-
         const logSmoke = (...args: unknown[]) => {
-            if (!shouldLogSmokeDetails()) {
+            if (!isSmokeVerificationMode()) {
                 return;
             }
             console.log(...args);
@@ -95,10 +82,12 @@ export default defineComponent({
 
         const startBrowserSession = async () => {
             try {
-                await backend.requestSystem(
-                    "runCliCommand",
-                    "opencli browser sunday init 2>/dev/null; echo done",
-                );
+                const result = (await backend.requestServiceConfig(
+                    "startBrowserSessionIfEnabled",
+                )) as { enabled?: boolean; started?: boolean; reason?: string } | null;
+                if (!result?.enabled || !result.started) {
+                    return;
+                }
                 logSmoke("[RootWindow] browser session started");
             } catch {
                 /* silent */
@@ -112,6 +101,7 @@ export default defineComponent({
             const autoRetryFailedFile = url.searchParams.get("autoRetryFailedFile");
             const autoClearAllFiles = url.searchParams.get("autoClearAllFiles");
             const autoOpenRecentConversation = url.searchParams.get("autoOpenRecentConversation");
+            const autoOpenRecentConversationId = url.searchParams.get("autoOpenRecentConversationId");
             const autoOpenToolFile = url.searchParams.get("autoOpenToolFile");
             const autoCopyToolPath = url.searchParams.get("autoCopyToolPath");
             const autoCopyToolCommand = url.searchParams.get("autoCopyToolCommand");
@@ -191,13 +181,46 @@ export default defineComponent({
                 return false;
             };
 
-            const clickRecentConversationCard = async (timeoutMs = 15000) => {
+            const waitForConversationSwitch = async (previousConversationId: string, timeoutMs = 10000) => {
+                if (!previousConversationId) {
+                    return "";
+                }
+
+                const deadline = Date.now() + timeoutMs;
+                while (Date.now() < deadline) {
+                    const currentConversationId = conversationManagerStore.getCurrentConversationId || "";
+                    if (currentConversationId && currentConversationId !== previousConversationId) {
+                        document.body.setAttribute(
+                            "data-rootwindow-auto-conversation-switch",
+                            `${previousConversationId}->${currentConversationId}`,
+                        );
+                        logSmoke(
+                            "[RootWindow] auto conversation switched:",
+                            previousConversationId,
+                            "->",
+                            currentConversationId,
+                        );
+                        return currentConversationId;
+                    }
+                    await new Promise((resolve) => setTimeout(resolve, 100));
+                }
+
+                return "";
+            };
+
+            const clickRecentConversationCard = async (targetConversationId = "", timeoutMs = 15000) => {
                 const deadline = Date.now() + timeoutMs;
                 while (Date.now() < deadline) {
                     const cards = Array.from(
                         document.querySelectorAll<HTMLElement>('[data-recent-conversation-card="true"]'),
                     );
-                    const card = cards[0] ?? null;
+                    const card =
+                        (targetConversationId
+                            ? cards.find(
+                                (candidate) =>
+                                    candidate.getAttribute("data-recent-conversation-id") === targetConversationId,
+                            )
+                            : cards[0]) ?? null;
                     if (card) {
                         const conversationId = card.getAttribute("data-recent-conversation-id") || "";
                         const summary = card.getAttribute("data-recent-conversation-summary") || "";
@@ -263,7 +286,7 @@ export default defineComponent({
             }
 
             if (autoOpenRecentConversation === "1" || autoOpenRecentConversation === "true") {
-                const conversationId = await clickRecentConversationCard(18000);
+                const conversationId = await clickRecentConversationCard(autoOpenRecentConversationId || "", 18000);
                 if (!conversationId) {
                     document.body.setAttribute("data-rootwindow-auto-recent-conversation", "missing");
                 }
@@ -388,16 +411,22 @@ export default defineComponent({
             }
 
             if (autoFollowUp === "1" || autoFollowUp === "true") {
+                const previousConversationId = conversationManagerStore.getCurrentConversationId || "";
                 const didClickFollowUp = await clickMessageAction("follow-up", 18000);
                 if (!didClickFollowUp) {
                     document.body.setAttribute("data-rootwindow-auto-message-action", "follow-up-missing");
+                } else {
+                    await waitForConversationSwitch(previousConversationId, 10000);
                 }
             }
 
             if (autoOpenBranch === "1" || autoOpenBranch === "true") {
+                const previousConversationId = conversationManagerStore.getCurrentConversationId || "";
                 const didClickOpenBranch = await clickMessageAction("open-branch", 18000);
                 if (!didClickOpenBranch) {
                     document.body.setAttribute("data-rootwindow-auto-message-action", "open-branch-missing");
+                } else {
+                    await waitForConversationSwitch(previousConversationId, 10000);
                 }
             }
 
@@ -409,6 +438,379 @@ export default defineComponent({
                 } catch (error) {
                     console.error("[RootWindow] auto file delete failed:", error);
                     document.body.setAttribute("data-rootwindow-auto-file-status", "delete-failed");
+                }
+            }
+        };
+
+        const maybeRunAutoBrowserPanelFlow = async () => {
+            const url = new URL(window.location.href);
+            const autoBrowserInit = url.searchParams.get("autoBrowserInit");
+            const autoBrowserOpenExample = url.searchParams.get("autoBrowserOpenExample");
+            const autoBrowserNewTabUrl = url.searchParams.get("autoBrowserNewTabUrl");
+            const autoBrowserSwitchTabUrl = url.searchParams.get("autoBrowserSwitchTabUrl");
+            const autoBrowserExtract = url.searchParams.get("autoBrowserExtract");
+            const autoBrowserCaptureScreenshot = url.searchParams.get("autoBrowserCaptureScreenshot");
+
+            const wantsBrowserFlow =
+                [autoBrowserInit, autoBrowserOpenExample, autoBrowserExtract, autoBrowserCaptureScreenshot].some(
+                    (value) => value === "1" || value === "true",
+                ) || Boolean(autoBrowserNewTabUrl) || Boolean(autoBrowserSwitchTabUrl);
+            if (!wantsBrowserFlow) {
+                return;
+            }
+
+            const readBrowserPanelSnapshot = () => {
+                const root = document.querySelector<HTMLElement>('[data-browser-panel-root="true"]');
+                if (!root) {
+                    return null;
+                }
+                return {
+                    loaded: root.getAttribute("data-browser-panel-loaded") || "false",
+                    busy: root.getAttribute("data-browser-panel-busy") || "false",
+                    enabled: root.getAttribute("data-browser-panel-enabled") || "false",
+                    daemonRunning: root.getAttribute("data-browser-panel-daemon-running") || "false",
+                    extensionConnected: root.getAttribute("data-browser-panel-extension-connected") || "false",
+                    statusSummary: root.getAttribute("data-browser-panel-status-summary") || "",
+                    session: root.getAttribute("data-browser-panel-session") || "",
+                    url: root.getAttribute("data-browser-panel-url") || "",
+                    title: root.getAttribute("data-browser-panel-title") || "",
+                    interactive: root.getAttribute("data-browser-panel-interactive") || "0",
+                    tabCount: root.getAttribute("data-browser-panel-tab-count") || "0",
+                    activeTabPage: root.getAttribute("data-browser-panel-active-tab-page") || "",
+                    activeTabUrl: root.getAttribute("data-browser-panel-active-tab-url") || "",
+                    activeTabTitle: root.getAttribute("data-browser-panel-active-tab-title") || "",
+                    extractReady: root.getAttribute("data-browser-panel-extract-ready") || "false",
+                    extractPreview: root.getAttribute("data-browser-panel-extract-preview") || "",
+                    extractError: root.getAttribute("data-browser-panel-extract-error") || "",
+                    screenshotReady: root.getAttribute("data-browser-panel-screenshot-ready") || "false",
+                    screenshotPath: root.getAttribute("data-browser-panel-screenshot-path") || "",
+                    screenshotError: root.getAttribute("data-browser-panel-screenshot-error") || "",
+                    lastActionKind: root.getAttribute("data-browser-panel-last-action-kind") || "idle",
+                    lastActionTitle: root.getAttribute("data-browser-panel-last-action-title") || "",
+                    lastActionDetail: root.getAttribute("data-browser-panel-last-action-detail") || "",
+                    tabs: Array.from(document.querySelectorAll<HTMLElement>("[data-browser-panel-tab]")).map((tab) => ({
+                        page: tab.getAttribute("data-browser-panel-tab-page") || tab.getAttribute("data-browser-panel-tab") || "",
+                        url: tab.getAttribute("data-browser-panel-tab-url") || "",
+                        title: tab.getAttribute("data-browser-panel-tab-title") || "",
+                        active: tab.getAttribute("data-browser-panel-tab-active") === "true",
+                    })),
+                };
+            };
+
+            const waitForBrowserPanel = async (predicate: (snapshot: NonNullable<ReturnType<typeof readBrowserPanelSnapshot>>) => boolean, timeoutMs = 15000) => {
+                const deadline = Date.now() + timeoutMs;
+                while (Date.now() < deadline) {
+                    const snapshot = readBrowserPanelSnapshot();
+                    if (snapshot && predicate(snapshot)) {
+                        return snapshot;
+                    }
+                    await new Promise((resolve) => setTimeout(resolve, 150));
+                }
+                return null;
+            };
+
+            const readBrowserPanelServiceState = async () => {
+                try {
+                    const state = (await backend.requestServiceConfig("getBrowserPanelState")) as {
+                        tabs?: Array<{ page?: string; url?: string; title?: string; active?: boolean }>;
+                        url?: string;
+                        title?: string;
+                        interactive?: number;
+                    } | null;
+                    const tabs = Array.isArray(state?.tabs) ? state.tabs : [];
+                    const activeTab = tabs.find((tab) => tab?.active) || tabs[0] || null;
+                    return {
+                        url: String(state?.url || ""),
+                        title: String(state?.title || ""),
+                        interactive: Number(state?.interactive || 0) || 0,
+                        tabs: tabs.map((tab) => ({
+                            page: String(tab?.page || ""),
+                            url: String(tab?.url || ""),
+                            title: String(tab?.title || ""),
+                            active: tab?.active === true,
+                        })),
+                        activeTabPage: String(activeTab?.page || ""),
+                        activeTabUrl: String(activeTab?.url || ""),
+                        activeTabTitle: String(activeTab?.title || ""),
+                    };
+                } catch {
+                    return null;
+                }
+            };
+
+            const normalizeBrowserUrl = (value: string) => {
+                const trimmed = String(value || "").trim();
+                if (!trimmed) {
+                    return "";
+                }
+                try {
+                    const parsed = new URL(trimmed);
+                    parsed.hash = "";
+                    return parsed.toString();
+                } catch {
+                    return trimmed;
+                }
+            };
+
+            const browserUrlsMatch = (actual: string, expected: string) => {
+                const normalizedActual = normalizeBrowserUrl(actual);
+                const normalizedExpected = normalizeBrowserUrl(expected);
+                return Boolean(normalizedActual) && normalizedActual === normalizedExpected;
+            };
+
+            const waitForBrowserPanelServiceState = async (
+                predicate: (snapshot: NonNullable<Awaited<ReturnType<typeof readBrowserPanelServiceState>>>) => boolean,
+                timeoutMs = 15000,
+            ) => {
+                const deadline = Date.now() + timeoutMs;
+                while (Date.now() < deadline) {
+                    const snapshot = await readBrowserPanelServiceState();
+                    if (snapshot && predicate(snapshot)) {
+                        return snapshot;
+                    }
+                    await new Promise((resolve) => setTimeout(resolve, 250));
+                }
+                return null;
+            };
+
+            const clickBrowserPanelAction = async (actionId: string, timeoutMs = 10000) => {
+                const deadline = Date.now() + timeoutMs;
+                while (Date.now() < deadline) {
+                    const button = document.querySelector<HTMLElement>(`[data-browser-panel-action="${actionId}"]`);
+                    if (button && !button.classList.contains("common-button--disabled")) {
+                        button.click();
+                        document.body.setAttribute("data-rootwindow-auto-browser-panel-action", actionId);
+                        logSmoke("[RootWindow] browser panel action clicked:", actionId);
+                        return true;
+                    }
+                    await new Promise((resolve) => setTimeout(resolve, 100));
+                }
+                console.warn("[RootWindow] browser panel action missing:", actionId);
+                return false;
+            };
+
+            const setBrowserPanelUrlInput = async (value: string, timeoutMs = 10000) => {
+                const deadline = Date.now() + timeoutMs;
+                while (Date.now() < deadline) {
+                    const input = document.querySelector<HTMLInputElement>('[data-browser-panel-input="url"]');
+                    if (input) {
+                        input.value = value;
+                        input.dispatchEvent(new Event("input", { bubbles: true }));
+                        document.body.setAttribute("data-rootwindow-auto-browser-panel-input", value);
+                        logSmoke("[RootWindow] browser panel input set:", value);
+                        return true;
+                    }
+                    await new Promise((resolve) => setTimeout(resolve, 100));
+                }
+                console.warn("[RootWindow] browser panel input missing");
+                return false;
+            };
+
+            const clickBrowserPanelTabByUrl = async (urlNeedle: string, timeoutMs = 12000, allowPartial = true) => {
+                const deadline = Date.now() + timeoutMs;
+                while (Date.now() < deadline) {
+                    const tabs = Array.from(document.querySelectorAll<HTMLElement>("[data-browser-panel-tab]"));
+                    const exactTarget = tabs.find((tab) => {
+                        const tabUrl = tab.getAttribute("data-browser-panel-tab-url") || "";
+                        return urlNeedle ? tabUrl === urlNeedle : false;
+                    }) ?? null;
+                    const partialTarget = allowPartial
+                        ? tabs.find((tab) => {
+                        const tabUrl = tab.getAttribute("data-browser-panel-tab-url") || "";
+                        return urlNeedle ? tabUrl.includes(urlNeedle) : false;
+                    }) ?? null
+                        : null;
+                    const target = exactTarget ?? partialTarget ?? null;
+                    if (target) {
+                        const tabUrl = target.getAttribute("data-browser-panel-tab-url") || "";
+                        target.click();
+                        document.body.setAttribute("data-rootwindow-auto-browser-panel-tab-target", tabUrl);
+                        logSmoke("[RootWindow] browser panel tab clicked:", tabUrl);
+                        return true;
+                    }
+                    await new Promise((resolve) => setTimeout(resolve, 100));
+                }
+                console.warn("[RootWindow] browser panel tab missing:", urlNeedle);
+                return false;
+            };
+
+            const initialSnapshot = await waitForBrowserPanel(
+                (snapshot) => snapshot.loaded === "true" && snapshot.busy === "false",
+                20000,
+            );
+            if (!initialSnapshot) {
+                document.body.setAttribute("data-rootwindow-auto-browser-panel", "missing");
+                console.warn("[RootWindow] browser panel root missing");
+                return;
+            }
+
+            document.body.setAttribute("data-rootwindow-auto-browser-panel", "ready");
+            logSmoke("[RootWindow] browser panel initial:", JSON.stringify(initialSnapshot));
+
+            if (autoBrowserInit === "1" || autoBrowserInit === "true") {
+                const didClickInit = await clickBrowserPanelAction("init-session", 12000);
+                if (didClickInit) {
+                    const initSnapshot = await waitForBrowserPanel((snapshot) => snapshot.busy === "false", 30000);
+                    if (initSnapshot) {
+                        logSmoke("[RootWindow] browser panel after init:", JSON.stringify(initSnapshot));
+                    }
+                }
+            }
+
+            if (autoBrowserOpenExample === "1" || autoBrowserOpenExample === "true") {
+                const didClickOpenExample = await clickBrowserPanelAction("open-example", 12000);
+                if (didClickOpenExample) {
+                    const urlSnapshot = await waitForBrowserPanel(
+                        (snapshot) =>
+                            snapshot.busy === "false" &&
+                            (snapshot.url.includes("example.com") || snapshot.activeTabUrl.includes("example.com")),
+                        45000,
+                    );
+                    if (urlSnapshot) {
+                        const resolvedUrl = urlSnapshot.url || urlSnapshot.activeTabUrl;
+                        const resolvedTitle = urlSnapshot.title || urlSnapshot.activeTabTitle;
+                        document.body.setAttribute("data-rootwindow-auto-browser-panel-url", resolvedUrl);
+                        logSmoke("[RootWindow] browser panel url ready:", resolvedUrl);
+                        if (resolvedTitle) {
+                            logSmoke("[RootWindow] browser panel title ready:", resolvedTitle);
+                        }
+                    }
+                }
+            }
+
+            if (autoBrowserNewTabUrl) {
+                const initialTabCount = Number(initialSnapshot.tabCount || "0") || 0;
+                const didSetInput = await setBrowserPanelUrlInput(autoBrowserNewTabUrl, 12000);
+                const didClickNewTab = didSetInput && (await clickBrowserPanelAction("new-tab", 12000));
+                if (didClickNewTab) {
+                    const newTabSnapshot = await waitForBrowserPanelServiceState(
+                        (snapshot) =>
+                            snapshot.tabs.some((tab) => tab.url.includes(autoBrowserNewTabUrl)) &&
+                            (snapshot.tabs.length >= initialTabCount + 1 ||
+                                snapshot.activeTabUrl.includes(autoBrowserNewTabUrl)),
+                        45000,
+                    );
+                    if (newTabSnapshot) {
+                        document.body.setAttribute(
+                            "data-rootwindow-auto-browser-panel-tab-count",
+                            String(newTabSnapshot.tabs.length),
+                        );
+                        logSmoke(
+                            "[RootWindow] browser panel new tab ready:",
+                            autoBrowserNewTabUrl,
+                            "count=",
+                            newTabSnapshot.tabs.length,
+                        );
+                        if (newTabSnapshot.activeTabUrl.includes(autoBrowserNewTabUrl)) {
+                            document.body.setAttribute(
+                                "data-rootwindow-auto-browser-panel-active-tab",
+                                newTabSnapshot.activeTabUrl,
+                            );
+                            logSmoke("[RootWindow] browser panel active tab:", newTabSnapshot.activeTabUrl);
+                        } else {
+                            const didClickCreatedTab = await clickBrowserPanelTabByUrl(autoBrowserNewTabUrl, 12000);
+                            if (didClickCreatedTab) {
+                                const selectedNewTab = await waitForBrowserPanel(
+                                    (snapshot) =>
+                                        snapshot.busy === "false" &&
+                                        snapshot.activeTabUrl.includes(autoBrowserNewTabUrl),
+                                    45000,
+                                );
+                                if (selectedNewTab) {
+                                    document.body.setAttribute(
+                                        "data-rootwindow-auto-browser-panel-active-tab",
+                                        selectedNewTab.activeTabUrl,
+                                    );
+                                    logSmoke("[RootWindow] browser panel active tab:", selectedNewTab.activeTabUrl);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (autoBrowserSwitchTabUrl) {
+                const didClickTargetTab = await clickBrowserPanelTabByUrl(autoBrowserSwitchTabUrl, 12000, false);
+                const switchedSnapshot = didClickTargetTab
+                    ? await waitForBrowserPanelServiceState(
+                        (snapshot) => browserUrlsMatch(snapshot.activeTabUrl, autoBrowserSwitchTabUrl),
+                        5000,
+                    )
+                    : null;
+                if (switchedSnapshot) {
+                    document.body.setAttribute(
+                        "data-rootwindow-auto-browser-panel-active-tab",
+                        switchedSnapshot.activeTabUrl,
+                    );
+                    logSmoke("[RootWindow] browser panel switched tab:", switchedSnapshot.activeTabUrl);
+                } else {
+                    const didSetTargetUrl = await setBrowserPanelUrlInput(autoBrowserSwitchTabUrl, 12000);
+                    const didClickOpenUrl = didSetTargetUrl && (await clickBrowserPanelAction("open-url", 12000));
+                    if (didClickOpenUrl) {
+                        const reopenedSnapshot = await waitForBrowserPanelServiceState(
+                            (snapshot) => browserUrlsMatch(snapshot.activeTabUrl, autoBrowserSwitchTabUrl),
+                            45000,
+                        );
+                        if (reopenedSnapshot) {
+                            document.body.setAttribute(
+                                "data-rootwindow-auto-browser-panel-active-tab",
+                                reopenedSnapshot.activeTabUrl,
+                            );
+                            logSmoke("[RootWindow] browser panel reopened url:", reopenedSnapshot.activeTabUrl);
+                        }
+                    }
+                }
+            }
+
+            if (autoBrowserExtract === "1" || autoBrowserExtract === "true") {
+                const didClickExtract = await clickBrowserPanelAction("extract-page", 12000);
+                if (didClickExtract) {
+                    const extractSnapshot = await waitForBrowserPanel(
+                        (snapshot) =>
+                            snapshot.busy === "false" &&
+                            ((snapshot.extractReady === "true" &&
+                                Boolean(snapshot.extractPreview) &&
+                                snapshot.extractPreview !== "提取失败") ||
+                                Boolean(snapshot.extractError)),
+                        45000,
+                    );
+                    if (extractSnapshot) {
+                        if (extractSnapshot.extractReady === "true" && extractSnapshot.extractPreview) {
+                            document.body.setAttribute("data-rootwindow-auto-browser-panel-extract", "ready");
+                            logSmoke("[RootWindow] browser panel extract preview:", extractSnapshot.extractPreview);
+                        } else if (extractSnapshot.extractError) {
+                            document.body.setAttribute("data-rootwindow-auto-browser-panel-extract", "error");
+                            logSmoke("[RootWindow] browser panel extract failed:", extractSnapshot.extractError);
+                        }
+                    }
+                }
+            }
+
+            if (autoBrowserCaptureScreenshot === "1" || autoBrowserCaptureScreenshot === "true") {
+                const didClickCapture = await clickBrowserPanelAction("capture-screenshot", 12000);
+                if (didClickCapture) {
+                    const screenshotSnapshot = await waitForBrowserPanel(
+                        (snapshot) =>
+                            snapshot.busy === "false" &&
+                            ((snapshot.screenshotReady === "true" && Boolean(snapshot.screenshotPath)) ||
+                                Boolean(snapshot.screenshotError)),
+                        45000,
+                    );
+                    if (screenshotSnapshot) {
+                        if (screenshotSnapshot.screenshotReady === "true" && screenshotSnapshot.screenshotPath) {
+                            document.body.setAttribute(
+                                "data-rootwindow-auto-browser-panel-screenshot",
+                                screenshotSnapshot.screenshotPath,
+                            );
+                            logSmoke("[RootWindow] browser panel screenshot ready:", screenshotSnapshot.screenshotPath);
+                        } else if (screenshotSnapshot.screenshotError) {
+                            document.body.setAttribute(
+                                "data-rootwindow-auto-browser-panel-screenshot",
+                                "error",
+                            );
+                            logSmoke("[RootWindow] browser panel screenshot failed:", screenshotSnapshot.screenshotError);
+                        }
+                    }
                 }
             }
         };
@@ -429,8 +831,8 @@ export default defineComponent({
             // Message timing observer
             const perfObs = new PerformanceObserver((list) => {
                 for (const entry of list.getEntries()) {
-                    if (entry.name.startsWith("sunday-")) {
-                        console.log("[Sunday Timing]", entry.name, entry.startTime.toFixed(1) + "ms");
+                    if (entry.name.startsWith("sunday-") && isSmokeVerificationMode()) {
+                        debugUiLog("[Sunday Timing]", entry.name, entry.startTime.toFixed(1) + "ms");
                     }
                 }
             });
@@ -521,10 +923,6 @@ export default defineComponent({
             // 初始化网络状态
             await networkStore.initNetworkStatus(backend.systemChannel);
 
-            if (windowMode === WindowMode.Main) {
-                await mainWindowStore.openStartupNewUserGuideDialogIfNeeded();
-            }
-
             const builtInWorkspaceIds = new Set<string>(Object.values(MAIN_WINDOW_WORKSPACE_PAGES));
             const canOpenStartupWorkspace =
                 !!startupWorkspace &&
@@ -538,6 +936,7 @@ export default defineComponent({
                 console.warn("[RootWindow] startup workspace not registered:", startupWorkspace);
             }
 
+            await maybeRunAutoBrowserPanelFlow();
             await maybeRunAutoFileFlow();
 
             // 通知后端窗口初始化完成

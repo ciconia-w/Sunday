@@ -1,7 +1,7 @@
 import { withQtVerifyRuntime } from "./qt-verify-runtime.mjs";
 
-async function post(path, body) {
-    const response = await fetch(`http://127.0.0.1:8787${path}`, {
+async function post(baseUrl, path, body) {
+    const response = await fetch(`${baseUrl}${path}`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(body ?? {}),
@@ -87,7 +87,7 @@ async function run() {
         const frontUrl = buildFrontUrl(staticPort);
         const sidecarBaseUrl = `http://127.0.0.1:${sidecarPort}`;
         const collector = await collectSession(sidecarBaseUrl);
-        const hostLog = await runHost(frontUrl, "15000", 20000);
+        const hostLog = await runHost(frontUrl, "25000", 35000);
         const events = normalizeEvents(await collector.waitForDone());
         const conversationIds = events
             .map((event) => event.parsedMessage.conversation_id || "")
@@ -105,7 +105,7 @@ async function run() {
                 ? "host-qt-live-confirmed"
                 : "host-qt-live-incomplete";
         if (conversationIds.length > 0) {
-            await post("/conversation/delete", {
+            await post(sidecarBaseUrl, "/conversation/delete", {
                 ids: [...new Set(conversationIds)],
             }).catch(() => undefined);
         }

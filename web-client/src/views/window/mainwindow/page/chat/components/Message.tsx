@@ -753,16 +753,18 @@ export default defineComponent({
             const lines: string[] = [];
 
             // 添加标题
-            lines.push(`# ${outlineData.title}`);
+            lines.push(`# ${outlineData?.title || "Untitled Outline"}`);
 
             // 遍历大章节
-            outlineData.paragraphs.forEach((paragraph) => {
+            const paragraphs = Array.isArray(outlineData?.paragraphs) ? outlineData.paragraphs : [];
+            paragraphs.forEach((paragraph) => {
                 lines.push(""); // 大章节后加空行
-                lines.push(`## ${paragraph.title}`);
+                lines.push(`## ${paragraph?.title || "Untitled Section"}`);
 
                 // 遍历小章节
-                paragraph.content.forEach((section) => {
-                    lines.push(`### ${section.title}`);
+                const sections = Array.isArray(paragraph?.content) ? paragraph.content : [];
+                sections.forEach((section) => {
+                    lines.push(`### ${section?.title || "Untitled Subsection"}`);
                 });
             });
 
@@ -788,7 +790,7 @@ export default defineComponent({
                 }
                 // 如果大纲数据还未加载，返回引用中的标题
                 const refData = outlineItem.data as OutlineRefData;
-                return `# ${refData.title}`;
+                return `# ${refData?.title || "Untitled Outline"}`;
             }
 
             // 普通文本：提取所有 text 类型的内容
@@ -1154,6 +1156,7 @@ export default defineComponent({
             loadedOutlineData,
             outlineLoading,
             cachedDisplayFiles,
+            cachedFileSummary,
             FileAlignment,
             PopoverPlacement,
             PopoverAlign,
@@ -1358,7 +1361,7 @@ export default defineComponent({
                                             const refData = item.data as OutlineRefData;
                                             return (
                                                 <div key={itemIndex} class="outline-loading">
-                                                    {refData.title || "加载大纲中..."}
+                                                    {refData?.title || "加载大纲中..."}
                                                 </div>
                                             );
                                         }

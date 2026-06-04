@@ -1,9 +1,15 @@
 import { readdir, readFile } from "node:fs/promises";
-import { join, basename } from "node:path";
+import { join, basename, relative, sep } from "node:path";
 import { homedir } from "node:os";
 
-function detectSource(skillDirName) {
-    if (skillDirName.startsWith(".")) {
+function detectSource(root, skillDir) {
+    if (root.source && root.source !== "auto") {
+        return root.source;
+    }
+
+    const relPath = relative(root.dir, skillDir);
+    const pathParts = relPath.split(sep).filter(Boolean);
+    if (pathParts.includes(".system") || basename(skillDir).startsWith(".")) {
         return "builtin";
     }
     return "local";
@@ -20,38 +26,67 @@ function extractDescription(markdown) {
 
 export class SkillsRegistry {
     constructor(options = {}) {
-        this.baseDir = options.baseDir ?? join(homedir(), ".codex", "skills");
+        const normalizedRoots = Array.isArray(options.roots) && options.roots.length > 0
+            ? options.roots
+            : [{ dir: options.baseDir ?? join(homedir(), ".codex", "skills"), source: "auto" }];
+        this.roots = normalizedRoots.map((root) => {
+            if (typeof root === "string") {
+                return { dir: root, source: "auto" };
+            }
+            return {
+                dir: root.dir,
+                source: root.source ?? "auto",
+            };
+        });
         this.skills = [];
         this.enabledByName = new Map();
     }
 
-    async reload() {
-        const entries = await readdir(this.baseDir, { withFileTypes: true }).catch(() => []);
-        const skills = [];
+    async collectSkillDirectories(rootDir) {
+        const entries = await readdir(rootDir, { withFileTypes: true }).catch(() => []);
+        const hasSkillFile = entries.some((entry) => entry.isFile() && entry.name === "SKILL.md");
+        if (hasSkillFile) {
+            return [rootDir];
+        }
 
+        const directories = [];
         for (const entry of entries) {
             if (!entry.isDirectory()) {
                 continue;
             }
+            directories.push(...(await this.collectSkillDirectories(join(rootDir, entry.name))));
+        }
+        return directories;
+    }
 
-            const skillDir = join(this.baseDir, entry.name);
-            const skillFile = join(skillDir, "SKILL.md");
-            const markdown = await readFile(skillFile, "utf8").catch(() => "");
-            if (!markdown) {
-                continue;
+    async reload() {
+        const collected = new Map();
+
+        for (const root of this.roots) {
+            const skillDirs = await this.collectSkillDirectories(root.dir);
+            for (const skillDir of skillDirs) {
+                const name = basename(skillDir);
+                if (collected.has(name)) {
+                    continue;
+                }
+
+                const skillFile = join(skillDir, "SKILL.md");
+                const markdown = await readFile(skillFile, "utf8").catch(() => "");
+                if (!markdown) {
+                    continue;
+                }
+
+                collected.set(name, {
+                    name,
+                    description: extractDescription(markdown),
+                    path: skillDir,
+                    source: detectSource(root, skillDir),
+                    enabled: this.enabledByName.get(name) ?? true,
+                });
             }
-
-            const name = basename(entry.name);
-            skills.push({
-                name,
-                description: extractDescription(markdown),
-                path: skillDir,
-                source: detectSource(entry.name),
-                enabled: this.enabledByName.get(name) ?? true,
-            });
         }
 
-        this.skills = skills.sort((left, right) => left.name.localeCompare(right.name));
+        this.skills = [...collected.values()].sort((left, right) => left.name.localeCompare(right.name));
         return this.skills;
     }
 

@@ -5,9 +5,9 @@ const bundlePath = getBuiltBundlePath();
 const bundle = await readFile(bundlePath, "utf8");
 
 const markers = [
-    "title-bar__brand-title",
+    "wsb-brand-name",
+    "wsb-brand-tag",
     "Sunday",
-    "AI 接管工作，每天都是周末",
     "input-area__model-selector",
 ];
 

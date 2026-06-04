@@ -5,17 +5,18 @@ const bundlePath = getBuiltBundlePath();
 const bundle = await readFile(bundlePath, "utf8");
 
 const markers = [
-    "Sunday",
+    "wsb-brand-name",
+    "wsb-newchat",
     "新建对话",
     "扩展",
     "自动化",
     "对话列表",
     "全部历史",
     "设置",
-    "window-sidebar__nav",
-    "window-sidebar__conversation-section",
+    "wsb-nav",
+    "wsb-convos",
     'type:"workspace"',
-    "window-sidebar__footer",
+    "wsb-foot",
 ];
 
 const present = Object.fromEntries(markers.map((marker) => [marker, bundle.includes(marker)]));

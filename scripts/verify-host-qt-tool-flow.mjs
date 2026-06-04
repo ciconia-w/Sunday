@@ -3,8 +3,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { withQtVerifyRuntime } from "./qt-verify-runtime.mjs";
 
-async function post(path, body) {
-    const response = await fetch(`http://127.0.0.1:8787${path}`, {
+async function post(baseUrl, path, body) {
+    const response = await fetch(`${baseUrl}${path}`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(body ?? {}),
@@ -100,7 +100,7 @@ async function run() {
         const frontUrl = buildFrontUrl(staticPort, prompt);
         const sidecarBaseUrl = `http://127.0.0.1:${sidecarPort}`;
         const collector = await collectSession(sidecarBaseUrl);
-        const hostLog = await runHost(frontUrl, "25000", 30000);
+        const hostLog = await runHost(frontUrl, "30000", 40000);
         const events = normalizeEvents(await collector.waitForDone());
 
         let fileContent = "";
@@ -135,7 +135,7 @@ async function run() {
             .map((event) => event.parsedMessage.conversation_id || "")
             .filter(Boolean);
         if (conversationIds.length > 0) {
-            await post("/conversation/delete", {
+            await post(sidecarBaseUrl, "/conversation/delete", {
                 ids: [...new Set(conversationIds)],
             }).catch(() => undefined);
         }

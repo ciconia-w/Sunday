@@ -1,5 +1,6 @@
 import { defineStore } from "pinia";
 import type { ReportEventPayload } from "@/types/report";
+import { debugUiDebug, debugUiLog } from "@/utils/debugLogging";
 
 export const useReportChannelStore = defineStore("reportChannel", {
     state: () => ({
@@ -20,7 +21,7 @@ export const useReportChannelStore = defineStore("reportChannel", {
             }
 
             this.reportChannel = reportChannel;
-            console.log("ReportChannel initialized");
+            debugUiLog("ReportChannel initialized");
         },
 
         /**
@@ -40,7 +41,7 @@ export const useReportChannelStore = defineStore("reportChannel", {
                 events.forEach(event => {
                     const jsonData = JSON.stringify(event);
                     this.reportChannel.writeReportEvent(jsonData);
-                    console.debug("Report event sent:", event.type);
+                    debugUiDebug("Report event sent:", event.type);
                 });
             } catch (error) {
                 console.error("Failed to send report event:", error);

@@ -78,6 +78,24 @@ function buildWelcomeUrl(port) {
     return url.toString();
 }
 
+async function waitForConversationIndex(baseUrl, conversationId, timeoutMs = 10000) {
+    const deadline = Date.now() + timeoutMs;
+
+    while (Date.now() < deadline) {
+        const indexesResult = await post(baseUrl, "/conversation/indexes", {});
+        const conversations = indexesResult?.result ?? [];
+        const targetConversation = conversations.find((item) => item.id === conversationId) ?? null;
+
+        if (targetConversation) {
+            return targetConversation;
+        }
+
+        await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+
+    return null;
+}
+
 async function run() {
     await withQtVerifyRuntime(
         {
@@ -115,18 +133,19 @@ async function run() {
             }
 
             await collector.waitForDone();
+            await post(sidecarBaseUrl, "/conversation/save", {
+                id: conversationId,
+            });
 
-            const beforeIndexes = await post(sidecarBaseUrl, "/conversation/indexes", {});
-            const beforeConversations = beforeIndexes?.result ?? [];
-            const targetConversation =
-                beforeConversations.find((item) => item.id === conversationId) ??
-                beforeConversations.find((item) => item.assistant === "uos-ai-generic");
+            const targetConversation = await waitForConversationIndex(sidecarBaseUrl, conversationId);
             if (!targetConversation?.id) {
                 throw new Error("Failed to locate seeded Sunday conversation.");
             }
 
             const frontUrl = buildWelcomeUrl(staticPort);
-            const hostLog = await runHost(frontUrl, "12000", 18000);
+            const frontUrlObject = new URL(frontUrl);
+            frontUrlObject.searchParams.set("autoOpenRecentConversationId", targetConversation.id);
+            const hostLog = await runHost(frontUrlObject.toString(), "12000", 18000);
 
             const sawRecentCardClick = hostLog.includes("[RootWindow] auto recent conversation clicked:");
             const sawRecentSummary =
@@ -158,7 +177,7 @@ async function run() {
             console.log(
                 JSON.stringify(
                     {
-                        frontUrl,
+                        frontUrl: frontUrlObject.toString(),
                         targetConversationId: targetConversation.id,
                         sawRecentCardClick,
                         sawRecentSummary,

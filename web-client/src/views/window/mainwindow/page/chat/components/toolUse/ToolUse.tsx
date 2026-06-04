@@ -20,9 +20,15 @@ interface NormalizedToolUseData {
     details?: Record<string, unknown>;
     hasParams: boolean;
     hasResult: boolean;
+    hasDetails: boolean;
     summary: string;
     fullOutputPath: string;
 }
+
+const isBrowserToolName = (name: string): boolean => {
+    const normalizedName = name.trim().toLowerCase();
+    return normalizedName === "browser" || normalizedName.startsWith("browser_");
+};
 
 const getToolTargetPath = (name: string, params: unknown): string => {
     const normalizedName = name.trim().toLowerCase();
@@ -54,7 +60,7 @@ const extractFullOutputPathFromText = (value: unknown): string => {
 
 const getToolFullOutputPath = (name: string, result: unknown, details: unknown): string => {
     const normalizedName = name.trim().toLowerCase();
-    if (normalizedName !== "bash") {
+    if (normalizedName !== "bash" && !isBrowserToolName(name)) {
         return "";
     }
 
@@ -67,6 +73,17 @@ const getToolFullOutputPath = (name: string, result: unknown, details: unknown):
 
     return extractFullOutputPathFromText(result);
 };
+
+const getToolDetailsString = (details: unknown, key: string): string => {
+    if (!isPlainObject(details)) {
+        return "";
+    }
+
+    const value = details[key];
+    return typeof value === "string" && value.trim() ? value.trim() : "";
+};
+
+const getToolErrorHint = (details: unknown): string => getToolDetailsString(details, "errorHint");
 
 const isPlainObject = (value: unknown): value is Record<string, unknown> => {
     return Object.prototype.toString.call(value) === "[object Object]";
@@ -199,10 +216,17 @@ const getRecordString = (value: unknown, keys: string[]): string => {
     return "";
 };
 
-const summarizeToolUse = (name: string, status: ToolUseStatus, params: unknown, result: unknown): string => {
+const summarizeToolUse = (
+    name: string,
+    status: ToolUseStatus,
+    params: unknown,
+    result: unknown,
+    details: unknown,
+): string => {
     const normalizedName = name.trim().toLowerCase();
     const paramsPath = getRecordString(params, ["path", "file_path", "target_path"]);
     const resultText = truncateText(collectTextFromToolValue(result));
+    const errorHint = truncateText(getToolErrorHint(details));
 
     if (normalizedName === "bash") {
         const command = truncateText(getRecordString(params, ["command", "cmd"]));
@@ -240,6 +264,62 @@ const summarizeToolUse = (name: string, status: ToolUseStatus, params: unknown, 
         return resultText || `${name} completed`;
     }
 
+    if (normalizedName.startsWith("browser_")) {
+        const url = truncateText(getRecordString(params, ["url"]));
+        const target = truncateText(getRecordString(params, ["target"]));
+        if (normalizedName === "browser_open") {
+            if (status === ToolUseStatus.Calling) {
+                return url ? `Opening ${url}` : "Opening browser page";
+            }
+            if (status === ToolUseStatus.Failed) {
+                return resultText || (url ? `Failed to open ${url}` : "Failed to open browser page");
+            }
+            return resultText || (url ? `Opened ${url}` : "Opened browser page");
+        }
+        if (normalizedName === "browser_state") {
+            if (status === ToolUseStatus.Failed) {
+                return resultText || "Failed to read browser state";
+            }
+            return status === ToolUseStatus.Calling ? "Reading browser state" : resultText || "Browser state updated";
+        }
+        if (normalizedName === "browser_click") {
+            return status === ToolUseStatus.Calling
+                ? target ? `Clicking ${target}` : "Clicking browser element"
+                : status === ToolUseStatus.Failed
+                    ? resultText || (target ? `Failed to click ${target}` : "Failed to click browser element")
+                : resultText || (target ? `Clicked ${target}` : "Clicked browser element");
+        }
+        if (normalizedName === "browser_type") {
+            return status === ToolUseStatus.Calling
+                ? target ? `Typing into ${target}` : "Typing into browser element"
+                : status === ToolUseStatus.Failed
+                    ? resultText || (target ? `Failed to type into ${target}` : "Failed to type into browser element")
+                : resultText || (target ? `Typed into ${target}` : "Typed into browser element");
+        }
+        if (normalizedName === "browser_wait") {
+            if (status === ToolUseStatus.Failed) {
+                return resultText || "Browser wait failed";
+            }
+            return status === ToolUseStatus.Calling ? "Waiting for browser condition" : resultText || "Browser wait completed";
+        }
+        if (normalizedName === "browser_extract") {
+            if (status === ToolUseStatus.Failed) {
+                return errorHint || resultText || "Failed to extract page content";
+            }
+            return status === ToolUseStatus.Calling ? "Extracting page content" : resultText || "Page content extracted";
+        }
+        if (normalizedName === "browser_screenshot") {
+            if (status === ToolUseStatus.Failed) {
+                return errorHint || resultText || "Failed to capture page screenshot";
+            }
+            return status === ToolUseStatus.Calling ? "Capturing page screenshot" : resultText || "Page screenshot captured";
+        }
+        if (status === ToolUseStatus.Failed) {
+            return errorHint || resultText || "Browser action failed";
+        }
+        return status === ToolUseStatus.Calling ? "Running browser action" : resultText || "Browser action completed";
+    }
+
     if (status === ToolUseStatus.Calling) {
         return `${name} in progress`;
     }
@@ -263,7 +343,8 @@ const normalizeToolUseData = (data: ToolUseData): NormalizedToolUseData => {
         details,
         hasParams: !isEmptyValue(params),
         hasResult: !isEmptyValue(result),
-        summary: summarizeToolUse(name, status, params, result),
+        hasDetails: !isEmptyValue(params) || !isEmptyValue(result) || !isEmptyValue(details),
+        summary: summarizeToolUse(name, status, params, result, details),
         fullOutputPath: getToolFullOutputPath(name, result, details),
     };
 };
@@ -349,7 +430,7 @@ export default defineComponent({
         const isExpanded = ref(props.defaultExpanded);
 
         const normalizedData = computed(() => normalizeToolUseData(props.data));
-        const hasDetails = computed(() => normalizedData.value.hasParams || normalizedData.value.hasResult);
+        const hasDetails = computed(() => normalizedData.value.hasDetails);
         const formattedParams = computed(() => formatToolUseValue(normalizedData.value.params));
         const formattedResult = computed(() => formatToolUseValue(normalizedData.value.result));
         const toolTargetPath = computed(() =>
@@ -361,6 +442,17 @@ export default defineComponent({
         const bashFullOutputPath = computed(() => normalizedData.value.fullOutputPath);
 
         const screenshotPath = computed(() => {
+            if (isBrowserToolName(normalizedData.value.name)) {
+                const details = normalizedData.value.details;
+                const detailScreenshotPath = getToolDetailsString(details, "screenshotPath");
+                if (detailScreenshotPath) {
+                    return detailScreenshotPath;
+                }
+                const detailFullOutputPath = getToolDetailsString(details, "fullOutputPath");
+                if (detailFullOutputPath.toLowerCase().endsWith(".png")) {
+                    return detailFullOutputPath;
+                }
+            }
             const cmd = bashCommand.value;
             if (!cmd || !cmd.includes("screenshot")) return "";
             const resultText = collectTextFromToolValue(normalizedData.value.result);
@@ -375,6 +467,9 @@ export default defineComponent({
             }
             if (normalizedData.value.hasResult) {
                 parts.push(`# ${useBackendStore().translate("Result")}\n${formattedResult.value}`);
+            }
+            if (!isEmptyValue(normalizedData.value.details)) {
+                parts.push(`# ${useBackendStore().translate("Details")}\n${formatToolUseValue(normalizedData.value.details)}`);
             }
 
             return parts.join("\n\n");

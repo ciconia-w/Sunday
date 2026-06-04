@@ -50,6 +50,7 @@ import {
     type AssistantChatPointParams,
     type ReportEventPayload,
 } from "@/types/report";
+import { debugUiLog, isSmokeVerificationMode } from "@/utils/debugLogging";
 
 export default defineComponent({
     name: "ChatView",
@@ -68,25 +69,8 @@ export default defineComponent({
         },
     },
     setup(props, { emit }) {
-        const shouldLogSmokeDetails = () => {
-            const params = new URL(window.location.href).searchParams;
-            return (
-                params.has("autoSend") ||
-                params.has("autoInjectFile") ||
-                params.has("autoRetryFailedFile") ||
-                params.has("autoClearAllFiles") ||
-                params.has("autoOpenRecentConversation") ||
-                params.has("autoOpenToolFile") ||
-                params.has("autoCopyToolPath") ||
-                params.has("autoCopyToolCommand") ||
-                params.has("autoFollowUp") ||
-                params.has("autoOpenBranch") ||
-                params.has("autoOpenFullOutput")
-            );
-        };
-
         const logSmoke = (...args: unknown[]) => {
-            if (!shouldLogSmokeDetails()) {
+            if (!isSmokeVerificationMode()) {
                 return;
             }
             console.log(...args);
@@ -793,7 +777,7 @@ export default defineComponent({
 
         const refreshSessionRuntimeMode = async () => {
             try {
-                const runtime = await backend.requestServiceConfig("getRuntimeStatus");
+                const runtime = (await backend.requestServiceConfig("getRuntimeStatus")) as { mode?: string } | null;
                 const rawMode = runtime?.mode;
                 if (rawMode === "live" || rawMode === "demo") {
                     sessionRuntimeMode.value = rawMode;
@@ -1030,7 +1014,7 @@ export default defineComponent({
         const quickInputStyle = ref("");
 
         const showQuickInput = (icon: string, text: string, styleClass?: string) => {
-            console.log("[ChatView] showQuickInput called:", { icon, text, styleClass });
+            debugUiLog("[ChatView] showQuickInput called:", { icon, text, styleClass });
             if (!icon.trim() || !text.trim()) {
                 console.warn("[ChatView] showQuickInput: icon or text is empty, ignored.");
                 return;
@@ -1042,7 +1026,7 @@ export default defineComponent({
         };
 
         const hideQuickInput = () => {
-            console.log("[ChatView] hideQuickInput called");
+            debugUiLog("[ChatView] hideQuickInput called");
             quickInputVisible.value = false;
         };
 
@@ -1204,7 +1188,7 @@ export default defineComponent({
                 }
 
                 const { question, isSend } = pendingPrompt;
-                console.log("Processing pending prompt:", question, isSend);
+                debugUiLog("Processing pending prompt:", question, isSend);
 
                 if (isSend) {
                     // 如果 isSend 为 true，先创建新会话再发送消息
@@ -1365,7 +1349,7 @@ export default defineComponent({
         };
     },
     render() {
-        const InputAreaExtension = this.inputAreaSceneConfig.actionExtension;
+        const InputAreaExtension = this.inputAreaSceneConfig.actionExtension as any;
 
         return (
             <div class="chat-view">

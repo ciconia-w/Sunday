@@ -1,7 +1,8 @@
 import { createServer } from "node:http";
 import { readFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
-import { dirname, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
+import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { PiSessionBridge } from "./runtime/pi-session-bridge.mjs";
 import { ConversationRepository } from "./runtime/conversation-repository.mjs";
@@ -10,6 +11,20 @@ import { McpRegistry } from "./runtime/mcp-registry.mjs";
 import { ExternalIngress } from "./runtime/external-ingress.mjs";
 import { createRuntimeConfig } from "./runtime/runtime-config.mjs";
 import { ModelConfigRegistry } from "./runtime/model-config-registry.mjs";
+import {
+    captureBrowserScreenshot,
+    createBrowserTab,
+    extractBrowserPage,
+    getBrowserScreenshotErrorDetails,
+    getBrowserControlStatus,
+    getBrowserPanelState,
+    initBrowserSession,
+    openBrowserUrl,
+    selectBrowserTab,
+    setBrowserControlEnabled,
+    startBrowserSessionIfEnabled,
+} from "./runtime/browser-control.mjs";
+import { getCliToolsState } from "./runtime/cli-tools-status.mjs";
 import { getModel } from "@earendil-works/pi-ai";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -106,8 +121,13 @@ const conversationRepository = new ConversationRepository({
     runtimeDir,
     assistants: [genericAssistantDefinition, ...retainedAssistantDefinitions],
 });
-const skillsRegistry = new SkillsRegistry({ baseDir: resolve(__dirname, "../skills") });
-const mcpRegistry = new McpRegistry();
+const skillsRegistry = new SkillsRegistry({
+    roots: [
+        { dir: join(homedir(), ".codex", "skills"), source: "auto" },
+        { dir: resolve(workspaceDir, "skills"), source: "repo" },
+    ],
+});
+const mcpRegistry = new McpRegistry({ runtimeDir });
 const externalIngress = new ExternalIngress({
     provider: runtimeConfig.provider,
     defaultModelId: runtimeConfig.modelId,
@@ -512,27 +532,134 @@ const server = createServer(async (_req, res) => {
             raw += chunk;
         });
         _req.on("end", async () => {
-            const body = raw ? JSON.parse(raw) : {};
-            let result = null;
+            try {
+                const body = raw ? JSON.parse(raw) : {};
+                let result = null;
 
-            if (_req.url === "/service-config/get-mcp-services") {
-                result = mcpRegistry.getServicesResponse();
-            } else if (_req.url === "/service-config/is-mcp-runtime-ready") {
-                result = mcpRegistry.isRuntimeReady();
-            } else if (_req.url === "/service-config/get-runtime-status") {
-                result = state.runtime;
-            } else if (_req.url === "/service-config/get-mcp-third-party-agreement") {
-                result = mcpRegistry.getThirdPartyAgreement();
-            } else if (_req.url === "/service-config/set-mcp-third-party-agreement") {
-                result = mcpRegistry.setThirdPartyAgreement(body.accepted === true);
-            } else {
-                res.writeHead(404, { "content-type": "application/json; charset=utf-8" });
-                res.end(JSON.stringify({ ok: false, error: "Unknown service-config endpoint" }));
-                return;
+                if (_req.url === "/service-config/get-mcp-services") {
+                    result = await mcpRegistry.getServicesResponse();
+                } else if (_req.url === "/service-config/is-mcp-runtime-ready") {
+                    result = mcpRegistry.isRuntimeReady();
+                } else if (_req.url === "/service-config/set-mcp-service-enabled") {
+                    result = await mcpRegistry.setServiceEnabled(body.serviceId ?? "", body.enabled === true);
+                } else if (_req.url === "/service-config/save-mcp-service") {
+                    result = await mcpRegistry.saveService(
+                        body.jsonConfig ?? "",
+                        body.description ?? "",
+                        body.serviceId ?? "",
+                    );
+                } else if (_req.url === "/service-config/delete-mcp-service") {
+                    result = await mcpRegistry.deleteService(body.serviceId ?? "");
+                } else if (_req.url === "/service-config/get-runtime-status") {
+                    result = state.runtime;
+                } else if (_req.url === "/service-config/get-cli-tools-state") {
+                    result = await getCliToolsState();
+                } else if (_req.url === "/service-config/get-browser-control-state") {
+                    result = await getBrowserControlStatus();
+                } else if (_req.url === "/service-config/set-browser-control-enabled") {
+                    result = setBrowserControlEnabled(body.enabled === true);
+                } else if (_req.url === "/service-config/get-browser-panel-state") {
+                    result = await getBrowserPanelState();
+                } else if (_req.url === "/service-config/start-browser-session-if-enabled") {
+                    result = await startBrowserSessionIfEnabled();
+                } else if (_req.url === "/service-config/init-browser-session") {
+                    result = await initBrowserSession();
+                } else if (_req.url === "/service-config/browser-open-url") {
+                    try {
+                        result = {
+                            ok: true,
+                            message: await openBrowserUrl(body.url ?? ""),
+                            error: "",
+                        };
+                    } catch (error) {
+                        result = {
+                            ok: false,
+                            message: "",
+                            error: error instanceof Error ? error.message : String(error),
+                        };
+                    }
+                } else if (_req.url === "/service-config/browser-new-tab") {
+                    try {
+                        result = {
+                            ok: true,
+                            message: await createBrowserTab(body.url ?? "https://example.com"),
+                            error: "",
+                        };
+                    } catch (error) {
+                        result = {
+                            ok: false,
+                            message: "",
+                            error: error instanceof Error ? error.message : String(error),
+                        };
+                    }
+                } else if (_req.url === "/service-config/browser-select-tab") {
+                    try {
+                        result = {
+                            ok: true,
+                            message: await selectBrowserTab(body.pageId ?? ""),
+                            error: "",
+                        };
+                    } catch (error) {
+                        result = {
+                            ok: false,
+                            message: "",
+                            error: error instanceof Error ? error.message : String(error),
+                        };
+                    }
+                } else if (_req.url === "/service-config/browser-extract-page") {
+                    try {
+                        result = {
+                            ok: true,
+                            content: await extractBrowserPage(),
+                            error: "",
+                        };
+                    } catch (error) {
+                        result = {
+                            ok: false,
+                            content: "",
+                            error: error instanceof Error ? error.message : String(error),
+                        };
+                    }
+                } else if (_req.url === "/service-config/browser-capture-screenshot") {
+                    try {
+                        result = {
+                            ok: true,
+                            ...(await captureBrowserScreenshot(body.outputPath ?? "")),
+                            error: "",
+                            errorKind: "",
+                            errorHint: "",
+                        };
+                    } catch (error) {
+                        const screenshotFailure = getBrowserScreenshotErrorDetails(error);
+                        result = {
+                            ok: false,
+                            screenshotPath: "",
+                            error: screenshotFailure.errorMessage,
+                            errorKind: screenshotFailure.errorKind,
+                            errorHint: screenshotFailure.errorHint,
+                        };
+                    }
+                } else if (_req.url === "/service-config/get-mcp-third-party-agreement") {
+                    result = await mcpRegistry.getThirdPartyAgreement();
+                } else if (_req.url === "/service-config/set-mcp-third-party-agreement") {
+                    result = await mcpRegistry.setThirdPartyAgreement(body.accepted === true);
+                } else {
+                    res.writeHead(404, { "content-type": "application/json; charset=utf-8" });
+                    res.end(JSON.stringify({ ok: false, error: "Unknown service-config endpoint" }));
+                    return;
+                }
+
+                res.writeHead(200, { "content-type": "application/json; charset=utf-8" });
+                res.end(JSON.stringify({ ok: true, result }));
+            } catch (error) {
+                res.writeHead(400, { "content-type": "application/json; charset=utf-8" });
+                res.end(
+                    JSON.stringify({
+                        ok: false,
+                        error: error instanceof Error ? error.message : String(error),
+                    }),
+                );
             }
-
-            res.writeHead(200, { "content-type": "application/json; charset=utf-8" });
-            res.end(JSON.stringify({ ok: true, result }));
         });
         return;
     }

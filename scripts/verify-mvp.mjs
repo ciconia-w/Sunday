@@ -162,7 +162,7 @@ const steps = [
         name: "titlebar-selector-hint",
         command: "npm",
         args: ["run", "verify:titlebar-selector-hint"],
-        description: "Verify the title bar clarifies that the global selector applies to new chats.",
+        description: "Verify the shell still exposes Sunday brand affordances alongside the global model selector.",
     },
     {
         name: "model-switch-feedback",
@@ -174,13 +174,13 @@ const steps = [
         name: "sidebar-workspaces",
         command: "npm",
         args: ["run", "verify:sidebar-workspaces"],
-        description: "Verify the primary sidebar exposes first-class workspace navigation for settings and extension pages.",
+        description: "Verify the primary sidebar exposes workspace navigation, conversation sections, and the settings entry.",
     },
     {
         name: "settings-home",
         command: "npm",
         args: ["run", "verify:settings-home"],
-        description: "Verify the shell exposes a unified settings landing page for runtime, skills, and MCP surfaces.",
+        description: "Verify the unified settings page still exposes runtime, model, extensions, and appearance entry points.",
     },
     {
         name: "conversation-context-overview",

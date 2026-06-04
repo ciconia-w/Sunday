@@ -17,7 +17,6 @@ const EXTENSIONS_WORKSPACE_TABS = new Set<MainWindowWorkspacePage>([
     MAIN_WINDOW_WORKSPACE_PAGES.SKILLS,
     MAIN_WINDOW_WORKSPACE_PAGES.CLI_TOOLS,
     MAIN_WINDOW_WORKSPACE_PAGES.MCP_SERVICES,
-    MAIN_WINDOW_WORKSPACE_PAGES.BROWSER_PANEL,
 ]);
 
 export const useMainWindowStore = defineStore("mainwindow", {
@@ -519,7 +518,7 @@ export const useMainWindowStore = defineStore("mainwindow", {
         },
 
         openBrowserPanelPage() {
-            return this.openExtensionsPage(MAIN_WINDOW_WORKSPACE_PAGES.BROWSER_PANEL);
+            return this.openWorkspacePage(MAIN_WINDOW_WORKSPACE_PAGES.BROWSER_PANEL);
         },
 
         openChatPage() {
