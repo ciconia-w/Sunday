@@ -123,17 +123,20 @@ Current state:
 - follow-up messages can auto-link to the current conversation tail even without a frontend participant
 - headless ingress replies can now be persisted back into conversation history after session completion
 - generic webhook reply push is now available above the ingress contract and can be reused across sidecar restarts
+- first provider-specific adapter is now available via `lark-bot-webhook` / `feishu-bot-webhook`
+- reply delivery now has baseline retry + dead-letter handling in sidecar runtime state
 
 Current gaps:
 
 - platform-specific bridge logic still needs to be layered on top of the generic ingress contract
-- retry queue / dead-letter / signature strategy for reply delivery are still missing
+- only one provider-specific transport exists today; broader platform coverage is still missing
+- retry policy is still minimal and in-process only; there is no persisted replay queue or operator surface
 
 Recommended next step:
 
 - keep `/ingress/message` as the canonical sidecar ingress contract
 - keep generic webhook reply push as the first reusable transport adapter
-- add provider-specific push/reply adapters above it
+- add more provider-specific push/reply adapters above it
 - use `taskObj` only if host-level delivery is required
 
 ### 4. Other Extensions

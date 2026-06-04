@@ -320,15 +320,27 @@ sessionBridge.sessionEvent.connect((event, sessionId, message) => {
                 conversation_id: parsed?.conversation_id ?? renderSnapshot?.conversationId ?? "",
                 renderItems: renderSnapshot?.renderItems ?? [],
             })
+            .then((result) => {
+                if (result && result.ok === false && !result.skipped) {
+                    console.error("[dev-server] external ingress reply delivery exhausted retries:", result);
+                }
+            })
             .catch((error) => {
                 console.error("[dev-server] external ingress reply push failed:", error);
             });
     }
 
     if (event === UosSessionEvent.SeError) {
-        externalIngress.handleSessionError(sessionId, message).catch((error) => {
-            console.error("[dev-server] external ingress error push failed:", error);
-        });
+        externalIngress
+            .handleSessionError(sessionId, message)
+            .then((result) => {
+                if (result && result.ok === false && !result.skipped) {
+                    console.error("[dev-server] external ingress error delivery exhausted retries:", result);
+                }
+            })
+            .catch((error) => {
+                console.error("[dev-server] external ingress error push failed:", error);
+            });
     }
 
     emitSession(event, sessionId, message);

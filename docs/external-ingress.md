@@ -31,6 +31,7 @@ Sunday 当前提供一个 sidecar 级别的外部消息入站协议：
 - `replyTransport`
 - `replyWebhookUrl`
 - `replyWebhookHeaders`
+- `replyWebhookSecret`
 
 ## Routing Contract
 
@@ -72,6 +73,26 @@ Sunday 当前提供一个 sidecar 级别的外部消息入站协议：
 - `external-ingress-routes.json`
 
 目前这是一个 sidecar 级 contract，不是前端能力。
+
+### Provider-specific adapter: Lark / Feishu custom bot webhook
+
+当前还额外支持一个 provider-specific transport：
+
+- `replyTransport = lark-bot-webhook`
+- `replyTransport = feishu-bot-webhook`（兼容别名，内部会归一化为 `lark-bot-webhook`）
+- `replyWebhookUrl = https://open.feishu.cn/open-apis/bot/v2/hook/...`
+- `replyWebhookSecret = ...`（可选；启用飞书自定义机器人的签名校验时需要）
+
+这条 adapter 会把 Sunday 的 reply 转成飞书自定义机器人的 `text` 消息体，并在提供 `replyWebhookSecret` 时自动补 `timestamp + sign`。
+
+当前保持最小实现：
+
+- 成功时发送 assistant 文本
+- 失败时发送 `Sunday 处理失败：...`
+- 不引入前端配置面
+- 继续复用相同的 route store
+
+也就是说，同一 `source + channelId + threadId` 的 follow-up 在 sidecar 重启后，仍可继续向同一条飞书 bot webhook 回推。
 
 ## Reply Webhook Payload
 
@@ -126,8 +147,33 @@ Sunday 当前提供一个 sidecar 级别的外部消息入站协议：
 约束：
 
 - 当前只支持 `http` / `https` webhook
-- 当前还没有平台专属签名、重试队列或死信处理
-- 更复杂的 IM 平台桥接应继续叠在这层 generic webhook adapter 之上
+- 当前 provider-specific transport 只落了飞书自定义机器人 webhook
+- 更复杂的 IM 平台桥接应继续叠在 generic webhook / lark bot webhook 这层 adapter 之上
+
+## Delivery Reliability
+
+reply push 当前已经补了最小 delivery reliability：
+
+- 默认最多投递 `3` 次
+- 默认重试延迟：`1s`、`3s`
+- 所有尝试都失败后，会写入 sidecar runtime 目录下的：
+  - `external-ingress-dead-letters.json`
+
+dead-letter 会记录：
+
+- transport
+- route key
+- conversation / session
+- 外部消息 id
+- 尝试次数
+- 每次失败时间和错误
+
+当前还没有：
+
+- 持久化重放队列
+- 指数退避策略
+- UI 管理面
+- 平台专属回执确认
 
 ## Persistence
 
@@ -170,6 +216,20 @@ npm run verify:ingress-api
 - webhook reply push
 - sidecar 重启后的 route reload
 - follow-up 在不重复携带 `replyWebhookUrl` 时仍可回推
+
+飞书 / Lark custom bot verifier：
+
+```bash
+cd <repo-root>
+npm run verify:ingress-lark-api
+```
+
+这条 verifier 当前会验证：
+
+- `lark-bot-webhook` / `feishu-bot-webhook` transport
+- 自定义机器人 `timestamp + sign`
+- 重试后成功投递
+- 多次失败后的 dead-letter 落盘
 
 源码/文档 verifier：
 

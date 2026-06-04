@@ -22,10 +22,17 @@ const checks = {
     ingressStoresReplyWebhookRoute: externalIngressSource.includes("replyWebhookUrl")
         && externalIngressSource.includes("routeStorePath")
         && externalIngressSource.includes("saveRouteTargets"),
+    ingressSupportsLarkWebhookTransport: externalIngressSource.includes("lark-bot-webhook")
+        && externalIngressSource.includes("createHmac")
+        && externalIngressSource.includes("replyWebhookSecret"),
     ingressPushesReplyOnFinish: externalIngressSource.includes("handleSessionFinished")
         && externalIngressSource.includes("postReply"),
     ingressPushesErrorOnFailure: externalIngressSource.includes("handleSessionError")
         && externalIngressSource.includes("errorCode"),
+    ingressRetriesAndStoresDeadLetters: externalIngressSource.includes("replyRetryDelaysMs")
+        && externalIngressSource.includes("deadLetterPath")
+        && externalIngressSource.includes("appendDeadLetter")
+        && externalIngressSource.includes("attemptCount"),
     headlessRepliesPersistOnFinish: devServerSource.includes("persistHeadlessSessionRender")
         && devServerSource.includes("setConversationRender")
         && devServerSource.includes("saveConversation(current.conversationId)"),
@@ -38,6 +45,10 @@ const checks = {
     docExplainsWebhookReply: ingressDocSource.includes("replyWebhookUrl")
         && ingressDocSource.includes("webhook")
         && ingressDocSource.includes("assistantText"),
+    docExplainsLarkAndReliability: ingressDocSource.includes("lark-bot-webhook")
+        && ingressDocSource.includes("replyWebhookSecret")
+        && ingressDocSource.includes("external-ingress-dead-letters.json")
+        && ingressDocSource.includes("重试"),
 };
 
 const verdict = Object.values(checks).every(Boolean)
