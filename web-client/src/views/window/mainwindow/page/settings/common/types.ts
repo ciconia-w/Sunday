@@ -114,11 +114,16 @@ export interface CliToolItem {
     name: string;
     description: string;
     enabled: boolean;
+    latestVersion?: string;
+    updateAvailable?: boolean;
     statusText?: string;
     statusTone?: ToolStatusTone;
     detailText?: string;
     actionText?: string;
     actionDisabled?: boolean;
+    actionKind?: string;
+    actionPayload?: string;
+    actionCommand?: string;
 }
 
 export function convertSkillToToolItem(skill: SkillRawItem): ToolManagementItem {

@@ -3,6 +3,7 @@ import TextButton from "@/components/TextButton";
 import ToolManagementList from "@/views/window/mainwindow/page/settings/common/components/ToolManagementList";
 import { useBackendStore, useNotifyStore } from "@/stores";
 import { convertCliToolToToolItem, type CliToolItem } from "@/views/window/mainwindow/page/settings/common/types";
+import { CopyDataType } from "@/types/message";
 import "@/assets/styles/window/mainwindow/page/settings/skills/SkillsPage.css";
 
 interface CliToolRuntimeItem extends CliToolItem {
@@ -10,6 +11,8 @@ interface CliToolRuntimeItem extends CliToolItem {
     detailText?: string;
     actionText?: string;
     actionDisabled?: boolean;
+    actionKind?: string;
+    actionPayload?: string;
     actionCommand?: string;
 }
 
@@ -58,32 +61,33 @@ export default defineComponent({
             setTimeout(refreshAll, 100);
         }
 
-        const handleToggle = async (toolId: string, enabled: boolean) => {
-            if (!enabled) return;
-            if (toolId === "gh-cli") {
-                await backendStore.requestSystem("runCliCommand", "nohup gh auth login --web --git-protocol https >/tmp/sunday-gh-auth.log 2>&1 & echo started");
-            } else if (toolId === "opencli") {
-                await backendStore.requestSystem("runCliCommand", "opencli doctor");
-            } else if (toolId === "lark-cli") {
-                await backendStore.requestSystem("runCliCommand", "lark-cli auth login --no-wait --json --domain all");
-            }
-            setTimeout(refreshAll, 3000);
-        };
+        const handleToggle = () => undefined;
 
         const handleRunAction = async (toolId: string) => {
             const targetTool = cliTools.value.find((item) => item.id === toolId);
-            const actionCommand = String(targetTool?.actionCommand || "").trim();
+            const actionKind = String(targetTool?.actionKind || "run-command").trim();
+            const actionPayload = String(targetTool?.actionPayload || targetTool?.actionCommand || "").trim();
 
-            if (!targetTool?.actionText || !actionCommand) {
+            if (!targetTool?.actionText || !actionPayload) {
                 void refreshAll();
                 return;
             }
 
             try {
-                await backendStore.requestSystem("runCliCommand", actionCommand);
+                if (actionKind === "copy-text") {
+                    await backendStore.requestSystem("copyToClipboard", actionPayload, CopyDataType.CopyText);
+                } else if (actionKind === "open-url") {
+                    await backendStore.requestSystem("openUrl", actionPayload);
+                } else {
+                    await backendStore.requestSystem("runCliCommand", actionPayload);
+                }
+
                 notifyStore.showToast({
                     type: "success",
-                    message: `${targetTool.name}：${targetTool.actionText}`,
+                    message:
+                        actionKind === "copy-text"
+                            ? `${targetTool.name}：已复制命令`
+                            : `${targetTool.name}：${targetTool.actionText}`,
                     duration: 1800,
                 });
             } catch (error) {

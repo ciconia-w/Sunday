@@ -78,6 +78,45 @@ function inferLarkStatus(commandExistsResult, authJson) {
     return "needs_auth";
 }
 
+function extractVersion(text) {
+    const trimmed = String(text || "").trim();
+    if (!trimmed) {
+        return "";
+    }
+
+    const versionMatch = trimmed.match(/\b\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?\b/);
+    if (versionMatch) {
+        return versionMatch[0];
+    }
+
+    return trimmed.split(/\s+/)[0] || "";
+}
+
+function compareVersions(left, right) {
+    const normalizeParts = (value) => extractVersion(value)
+        .replace(/^v/i, "")
+        .split(/[.+-]/)
+        .map((part) => Number.parseInt(part, 10))
+        .map((part) => (Number.isFinite(part) ? part : 0));
+
+    const leftParts = normalizeParts(left);
+    const rightParts = normalizeParts(right);
+    const length = Math.max(leftParts.length, rightParts.length);
+
+    for (let index = 0; index < length; index += 1) {
+        const leftPart = leftParts[index] ?? 0;
+        const rightPart = rightParts[index] ?? 0;
+        if (leftPart > rightPart) {
+            return 1;
+        }
+        if (leftPart < rightPart) {
+            return -1;
+        }
+    }
+
+    return 0;
+}
+
 await withSidecarRuntime(
     {
         sidecarPort: 8809,
@@ -111,15 +150,33 @@ await withSidecarRuntime(
                 typeof item?.detailText === "string" &&
                     item.detailText.length > 0 &&
                     typeof item?.actionText === "string" &&
-                    typeof item?.actionDisabled === "boolean",
+                    typeof item?.actionDisabled === "boolean" &&
+                    typeof item?.actionKind === "string" &&
+                    typeof item?.actionPayload === "string" &&
+                    typeof item?.latestVersion === "string" &&
+                    typeof item?.updateAvailable === "boolean",
             ]),
+        );
+        const updateMetadataChecks = Object.fromEntries(
+            endpointItems.map((item) => {
+                const currentVersion = extractVersion(item?.detailText);
+                const latestVersion = extractVersion(item?.latestVersion);
+                const shouldUpdate = currentVersion && latestVersion
+                    ? compareVersions(currentVersion, latestVersion) < 0
+                    : false;
+                return [
+                    item.id,
+                    shouldUpdate ? item?.updateAvailable === true : true,
+                ];
+            }),
         );
 
         const verdict =
             endpointResult?.ok === true &&
             endpointItems.length === 3 &&
             Object.values(matches).every(Boolean) &&
-            Object.values(metadataChecks).every(Boolean)
+            Object.values(metadataChecks).every(Boolean) &&
+            Object.values(updateMetadataChecks).every(Boolean)
                 ? "cli-tools-api-confirmed"
                 : "cli-tools-api-incomplete";
 
@@ -131,6 +188,7 @@ await withSidecarRuntime(
                     expected,
                     matches,
                     metadataChecks,
+                    updateMetadataChecks,
                     verdict,
                 },
                 null,
