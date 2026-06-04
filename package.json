@@ -39,6 +39,7 @@
     "verify:browser-noninvasive-source": "node ./scripts/verify-browser-noninvasive-source.mjs",
     "verify:browser-tool-use-bundle": "node ./scripts/verify-browser-tool-use-bundle.mjs",
     "verify:cli-tools-api": "node ./scripts/verify-cli-tools-api.mjs",
+    "verify:cli-tools-source": "node ./scripts/verify-cli-tools-source.mjs",
     "verify:mcp-api": "node ./scripts/verify-mcp-api.mjs",
     "verify:skills-api": "node ./scripts/verify-skills-api.mjs",
     "verify:skills-import-source": "node ./scripts/verify-skills-import-source.mjs",

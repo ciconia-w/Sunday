@@ -110,6 +110,8 @@ Date: 2026-06-03
   - PATH 动态发现
   - 版本和安装路径展示
   - 登录 / 重新登录 / 安装 / 诊断动作入口
+  - latest version 比对
+  - 安装 / 更新 guidance（复制命令或打开文档）
   - CLI 列表不再把状态开关当成主操作按钮
 - skills inventory 现在会过滤 frontmatter 噪声，展示更干净的描述，并把 source/path 作为可见上下文暴露在列表里
 - skills 页面现在已接通本地目录导入；导入会复制到受管的 user skills root，已导入 skill 也支持从页面删除
@@ -195,7 +197,6 @@ Date: 2026-06-03
     - clearer error feedback
 3. skills / CLI productization:
    - skills GitHub 导入 / 更明确的 source-of-truth 入口
-   - CLI latest version / update guidance
 4. 然后再进入更大的扩展平台方向：
    - IM bridge
    - extension install / market flows
