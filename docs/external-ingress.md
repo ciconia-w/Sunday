@@ -158,6 +158,7 @@ reply push 当前已经补了最小 delivery reliability：
 - 默认重试延迟：`1s`、`3s`
 - 所有尝试都失败后，会写入 sidecar runtime 目录下的：
   - `external-ingress-dead-letters.json`
+  - `external-ingress-replay-queue.json`
 
 dead-letter 会记录：
 
@@ -168,12 +169,108 @@ dead-letter 会记录：
 - 尝试次数
 - 每次失败时间和错误
 
+reply queue 会额外保留：
+
+- 完整 reply target（包含 provider-specific secret；该文件应视为敏感运行态文件）
+- 待重放 payload
+- 累计 attempt / replay 次数
+- delivered / resolved 等状态
+
 当前还没有：
 
-- 持久化重放队列
 - 指数退避策略
-- UI 管理面
+- 前端 UI 管理面
 - 平台专属回执确认
+
+## Operator Surface
+
+为了让失败投递不只停留在 dead-letter 文件里，sidecar 现在额外暴露最小 operator API：
+
+- `POST /ingress/get-reply-routes`
+- `POST /ingress/get-replay-queue`
+- `POST /ingress/replay-queue/replay`
+- `POST /ingress/replay-queue/resolve`
+
+这些 endpoint 当前都是 sidecar operator surface，不经过前端 UI。
+
+### Reply routes
+
+`POST /ingress/get-reply-routes`
+
+返回当前按 `source + channelId + threadId` 持久化的 reply route。返回体里的 `replyTarget` 会做安全收口：
+
+- 保留 `transport`
+- 保留 `url`
+- 保留 `hasSecret`
+- 不直接暴露 secret 明文
+
+### Replay queue
+
+`POST /ingress/get-replay-queue`
+
+请求体可选：
+
+```json
+{
+  "includeResolved": true
+}
+```
+
+返回：
+
+- `counts`
+- `entries`
+
+其中每个 entry 当前会带：
+
+- `id`
+- `status`
+- `transport`
+- `routeKey`
+- `conversationId`
+- `sessionId`
+- `requestExternalMessageId`
+- `replyTarget`（已做 secret 脱敏）
+- `payloadSummary`
+- `attemptCount`
+- `replayCount`
+- `latestError`
+- `createdAt / updatedAt / deliveredAt / resolvedAt`
+
+### Replay one entry
+
+`POST /ingress/replay-queue/replay`
+
+```json
+{
+  "id": "<queue-entry-id>"
+}
+```
+
+行为：
+
+- 读取持久化 replay queue 中的完整 reply target 和 payload
+- 使用当前 reply retry policy 再投递一次
+- 成功后把 entry 标成 `delivered`
+- 失败后继续保留为 `pending`
+
+### Resolve one entry
+
+`POST /ingress/replay-queue/resolve`
+
+```json
+{
+  "id": "<queue-entry-id>",
+  "resolution": "resolved"
+}
+```
+
+当前支持：
+
+- `resolved`
+- `discarded`
+
+resolve 后该 entry 会从默认 open queue 里消失，但在 `includeResolved=true` 时仍可查历史记录。
 
 ## Persistence
 
@@ -230,6 +327,20 @@ npm run verify:ingress-lark-api
 - 自定义机器人 `timestamp + sign`
 - 重试后成功投递
 - 多次失败后的 dead-letter 落盘
+
+operator surface verifier：
+
+```bash
+cd <repo-root>
+npm run verify:ingress-operator-api
+```
+
+这条 verifier 当前会验证：
+
+- 失败 reply push 会进入持久化 replay queue
+- replay queue 能跨 sidecar 重启保留
+- operator replay 会重新投递并更新状态
+- operator resolve 会把 entry 从 open queue 中移除
 
 源码/文档 verifier：
 

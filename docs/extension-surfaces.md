@@ -125,17 +125,19 @@ Current state:
 - generic webhook reply push is now available above the ingress contract and can be reused across sidecar restarts
 - first provider-specific adapter is now available via `lark-bot-webhook` / `feishu-bot-webhook`
 - reply delivery now has baseline retry + dead-letter handling in sidecar runtime state
+- persisted replay queue and sidecar operator API now exist for failed reply delivery
 
 Current gaps:
 
 - platform-specific bridge logic still needs to be layered on top of the generic ingress contract
 - only one provider-specific transport exists today; broader platform coverage is still missing
-- retry policy is still minimal and in-process only; there is no persisted replay queue or operator surface
+- retry policy is still minimal and in-process only; there is no front-end operator UI or background replay worker
 
 Recommended next step:
 
 - keep `/ingress/message` as the canonical sidecar ingress contract
 - keep generic webhook reply push as the first reusable transport adapter
+- keep replay / resolve / route inspection in sidecar operator APIs instead of frontend-specific code first
 - add more provider-specific push/reply adapters above it
 - use `taskObj` only if host-level delivery is required
 

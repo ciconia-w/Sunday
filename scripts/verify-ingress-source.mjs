@@ -33,12 +33,20 @@ const checks = {
         && externalIngressSource.includes("deadLetterPath")
         && externalIngressSource.includes("appendDeadLetter")
         && externalIngressSource.includes("attemptCount"),
+    ingressPersistsReplayQueue: externalIngressSource.includes("replayQueuePath")
+        && externalIngressSource.includes("createReplayQueueEntry")
+        && externalIngressSource.includes("replayQueuedReply")
+        && externalIngressSource.includes("resolveReplayQueueEntry"),
     headlessRepliesPersistOnFinish: devServerSource.includes("persistHeadlessSessionRender")
         && devServerSource.includes("setConversationRender")
         && devServerSource.includes("saveConversation(current.conversationId)"),
     devServerTriggersReplyPush: devServerSource.includes("handleSessionStarted")
         && devServerSource.includes("handleSessionFinished")
         && devServerSource.includes("handleSessionError"),
+    devServerExposesIngressOperatorApi: devServerSource.includes("/ingress/get-reply-routes")
+        && devServerSource.includes("/ingress/get-replay-queue")
+        && devServerSource.includes("/ingress/replay-queue/replay")
+        && devServerSource.includes("/ingress/replay-queue/resolve"),
     docExplainsThreadRouting: ingressDocSource.includes("threadId")
         && ingressDocSource.includes("同一 thread")
         && ingressDocSource.includes("/ingress/message"),
@@ -49,6 +57,10 @@ const checks = {
         && ingressDocSource.includes("replyWebhookSecret")
         && ingressDocSource.includes("external-ingress-dead-letters.json")
         && ingressDocSource.includes("重试"),
+    docExplainsReplayOperatorSurface: ingressDocSource.includes("external-ingress-replay-queue.json")
+        && ingressDocSource.includes("/ingress/get-replay-queue")
+        && ingressDocSource.includes("/ingress/replay-queue/replay")
+        && ingressDocSource.includes("/ingress/replay-queue/resolve"),
 };
 
 const verdict = Object.values(checks).every(Boolean)

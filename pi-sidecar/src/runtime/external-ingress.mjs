@@ -116,6 +116,42 @@ function sanitizeReplyTarget(replyTarget) {
     };
 }
 
+function summarizeReplyPayload(payload) {
+    const assistantText = typeof payload?.assistantText === "string" ? payload.assistantText.trim() : "";
+    const errorText = typeof payload?.error === "string" ? payload.error.trim() : "";
+
+    return {
+        ok: payload?.ok === true,
+        assistantTextPreview: assistantText ? assistantText.slice(0, 160) : "",
+        errorPreview: errorText ? errorText.slice(0, 160) : "",
+    };
+}
+
+function summarizeReplayQueueEntry(entry) {
+    if (!entry || typeof entry !== "object") {
+        return {};
+    }
+
+    return {
+        id: entry.id ?? "",
+        status: entry.status ?? "",
+        transport: entry.transport ?? "",
+        routeKey: entry.routeKey ?? "",
+        conversationId: entry.conversationId ?? "",
+        sessionId: entry.sessionId ?? "",
+        requestExternalMessageId: entry.requestExternalMessageId ?? "",
+        replyTarget: sanitizeReplyTarget(entry.replyTarget),
+        payloadSummary: summarizeReplyPayload(entry.payload),
+        attemptCount: normalizeNonNegativeInteger(entry.attemptCount, 0),
+        replayCount: normalizeNonNegativeInteger(entry.replayCount, 0),
+        latestError: entry.latestError ?? "",
+        createdAt: entry.createdAt ?? "",
+        updatedAt: entry.updatedAt ?? "",
+        deliveredAt: entry.deliveredAt ?? "",
+        resolvedAt: entry.resolvedAt ?? "",
+    };
+}
+
 function formatLarkReplyText(payload) {
     if (payload?.ok === true) {
         return typeof payload?.assistantText === "string" && payload.assistantText.trim()
@@ -138,11 +174,13 @@ export class ExternalIngress {
         this.options = options;
         this.routeStorePath = resolve(options.runtimeDir, "external-ingress-routes.json");
         this.deadLetterPath = resolve(options.runtimeDir, "external-ingress-dead-letters.json");
+        this.replayQueuePath = resolve(options.runtimeDir, "external-ingress-replay-queue.json");
         this.replyRetryDelaysMs = normalizeRetryDelays(
             process.env.PERSONAL_AGENT_INGRESS_REPLY_RETRY_DELAYS_MS,
             [1000, 3000],
         );
         this.routeTargets = new Map();
+        this.replayQueue = new Map();
         this.sessionQueues = new Map();
         this.activeSessionJobs = new Map();
         this.readyPromise = null;
@@ -153,7 +191,7 @@ export class ExternalIngress {
             return this.readyPromise;
         }
 
-        this.readyPromise = this.loadRouteTargets();
+        this.readyPromise = Promise.all([this.loadRouteTargets(), this.loadReplayQueue()]).then(() => undefined);
         return this.readyPromise;
     }
 
@@ -179,6 +217,30 @@ export class ExternalIngress {
             String(left.routeKey ?? "").localeCompare(String(right.routeKey ?? "")),
         );
         await writeFile(this.routeStorePath, JSON.stringify({ routes }, null, 2));
+    }
+
+    async loadReplayQueue() {
+        try {
+            const raw = await readFile(this.replayQueuePath, "utf8");
+            const parsed = JSON.parse(raw);
+            const entries = Array.isArray(parsed?.entries) ? parsed.entries : [];
+
+            this.replayQueue = new Map(
+                entries
+                    .filter((entry) => typeof entry?.id === "string" && entry.id.trim())
+                    .map((entry) => [entry.id.trim(), entry]),
+            );
+        } catch {
+            this.replayQueue = new Map();
+        }
+    }
+
+    async saveReplayQueue() {
+        await mkdir(dirname(this.replayQueuePath), { recursive: true });
+        const entries = [...this.replayQueue.values()].sort((left, right) =>
+            String(left.createdAt ?? "").localeCompare(String(right.createdAt ?? "")),
+        );
+        await writeFile(this.replayQueuePath, JSON.stringify({ entries }, null, 2));
     }
 
     getStoredReplyTarget(routeKey) {
@@ -250,6 +312,71 @@ export class ExternalIngress {
         await mkdir(dirname(this.deadLetterPath), { recursive: true });
         existingEntries.push(entry);
         await writeFile(this.deadLetterPath, JSON.stringify({ entries: existingEntries }, null, 2));
+    }
+
+    async listReplyRoutes() {
+        await this.ensureReady();
+        return [...this.routeTargets.values()]
+            .sort((left, right) => String(left.routeKey ?? "").localeCompare(String(right.routeKey ?? "")))
+            .map((entry) => ({
+                routeKey: entry.routeKey ?? "",
+                source: entry.source ?? "",
+                channelId: entry.channelId ?? "",
+                threadId: entry.threadId ?? "",
+                conversationId: entry.conversationId ?? "",
+                sessionId: entry.sessionId ?? "",
+                replyTarget: sanitizeReplyTarget(entry.replyTarget),
+                updatedAt: entry.updatedAt ?? "",
+            }));
+    }
+
+    async getReplayQueue(options = {}) {
+        await this.ensureReady();
+        const includeResolved = options.includeResolved === true;
+        const entries = [...this.replayQueue.values()]
+            .filter((entry) => includeResolved || !["resolved", "discarded"].includes(String(entry.status ?? "")))
+            .sort((left, right) => String(left.createdAt ?? "").localeCompare(String(right.createdAt ?? "")))
+            .map((entry) => summarizeReplayQueueEntry(entry));
+
+        const counts = {
+            total: entries.length,
+            pending: entries.filter((entry) => entry.status === "pending").length,
+            delivered: entries.filter((entry) => entry.status === "delivered").length,
+            resolved: entries.filter((entry) => entry.status === "resolved").length,
+            discarded: entries.filter((entry) => entry.status === "discarded").length,
+        };
+
+        return {
+            counts,
+            entries,
+        };
+    }
+
+    async createReplayQueueEntry(replyTarget, payload, errors) {
+        const now = new Date().toISOString();
+        const entry = {
+            id: randomUUID(),
+            status: "pending",
+            transport: replyTarget.transport ?? "",
+            routeKey: payload?.routeKey ?? "",
+            conversationId: payload?.conversationId ?? "",
+            sessionId: payload?.sessionId ?? "",
+            requestExternalMessageId: payload?.requestExternalMessageId ?? "",
+            replyTarget,
+            payload,
+            attemptCount: errors.length,
+            replayCount: 0,
+            latestError: errors[errors.length - 1]?.error ?? "Reply delivery failed",
+            errors,
+            createdAt: now,
+            updatedAt: now,
+            deliveredAt: "",
+            resolvedAt: "",
+        };
+
+        this.replayQueue.set(entry.id, entry);
+        await this.saveReplayQueue();
+        return entry;
     }
 
     getRouteIdentity(body) {
@@ -429,6 +556,41 @@ export class ExternalIngress {
         });
     }
 
+    async executeReplyDelivery(replyTarget, payload) {
+        const errors = [];
+        const maxAttempts = this.replyRetryDelaysMs.length + 1;
+
+        for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+            try {
+                const result = await this.postReply(replyTarget, payload);
+                return {
+                    ok: true,
+                    result,
+                    errors,
+                    attemptCount: attempt,
+                };
+            } catch (error) {
+                const errorMessage = error instanceof Error ? error.message : String(error);
+                errors.push({
+                    attempt,
+                    error: errorMessage,
+                    at: new Date().toISOString(),
+                });
+
+                if (attempt < maxAttempts) {
+                    await wait(this.replyRetryDelaysMs[attempt - 1] ?? 0);
+                    continue;
+                }
+            }
+        }
+
+        return {
+            ok: false,
+            errors,
+            attemptCount: errors.length,
+        };
+    }
+
     createLarkBotSignature(secret) {
         const timestamp = String(Math.floor(Date.now() / 1000));
         const stringToSign = `${timestamp}\n${secret}`;
@@ -502,31 +664,15 @@ export class ExternalIngress {
     }
 
     async deliverReply(replyTarget, payload) {
-        const errors = [];
-        const maxAttempts = this.replyRetryDelaysMs.length + 1;
-
-        for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-            try {
-                const result = await this.postReply(replyTarget, payload);
-                return {
-                    ...result,
-                    attemptCount: attempt,
-                };
-            } catch (error) {
-                const errorMessage = error instanceof Error ? error.message : String(error);
-                errors.push({
-                    attempt,
-                    error: errorMessage,
-                    at: new Date().toISOString(),
-                });
-
-                if (attempt < maxAttempts) {
-                    await wait(this.replyRetryDelaysMs[attempt - 1] ?? 0);
-                    continue;
-                }
-            }
+        const delivery = await this.executeReplyDelivery(replyTarget, payload);
+        if (delivery.ok) {
+            return {
+                ...delivery.result,
+                attemptCount: delivery.attemptCount,
+            };
         }
 
+        const replayQueueEntry = await this.createReplayQueueEntry(replyTarget, payload, delivery.errors);
         const deadLetterEntry = {
             id: randomUUID(),
             transport: replyTarget.transport ?? "",
@@ -536,8 +682,9 @@ export class ExternalIngress {
             requestExternalMessageId: payload?.requestExternalMessageId ?? "",
             replyTarget: sanitizeReplyTarget(replyTarget),
             payload,
-            attemptCount: errors.length,
-            errors,
+            attemptCount: delivery.errors.length,
+            replayQueueEntryId: replayQueueEntry.id,
+            errors: delivery.errors,
             createdAt: new Date().toISOString(),
         };
         await this.appendDeadLetter(deadLetterEntry);
@@ -545,10 +692,83 @@ export class ExternalIngress {
         return {
             ok: false,
             transport: replyTarget.transport ?? "",
-            attemptCount: errors.length,
-            error: errors[errors.length - 1]?.error ?? "Reply delivery failed",
+            attemptCount: delivery.errors.length,
+            error: delivery.errors[delivery.errors.length - 1]?.error ?? "Reply delivery failed",
             deadLetterId: deadLetterEntry.id,
+            replayQueueEntryId: replayQueueEntry.id,
         };
+    }
+
+    async replayQueuedReply(id) {
+        await this.ensureReady();
+        const normalizedId = typeof id === "string" ? id.trim() : "";
+        if (!normalizedId) {
+            throw new Error("Replay queue entry id is required");
+        }
+
+        const entry = this.replayQueue.get(normalizedId);
+        if (!entry) {
+            throw new Error(`Replay queue entry not found: ${normalizedId}`);
+        }
+
+        if (["resolved", "discarded"].includes(String(entry.status ?? ""))) {
+            throw new Error(`Replay queue entry is already ${entry.status}`);
+        }
+
+        const delivery = await this.executeReplyDelivery(entry.replyTarget ?? {}, entry.payload ?? {});
+        const now = new Date().toISOString();
+        entry.attemptCount = normalizeNonNegativeInteger(entry.attemptCount, 0) + delivery.attemptCount;
+        entry.replayCount = normalizeNonNegativeInteger(entry.replayCount, 0) + 1;
+        entry.updatedAt = now;
+
+        if (delivery.ok) {
+            entry.status = "delivered";
+            entry.latestError = "";
+            entry.deliveredAt = now;
+        } else {
+            entry.status = "pending";
+            entry.latestError = delivery.errors[delivery.errors.length - 1]?.error ?? "Reply delivery failed";
+            entry.errors = [...(Array.isArray(entry.errors) ? entry.errors : []), ...delivery.errors];
+        }
+
+        this.replayQueue.set(entry.id, entry);
+        await this.saveReplayQueue();
+
+        return {
+            ok: delivery.ok,
+            attemptCount: delivery.attemptCount,
+            error: delivery.ok ? "" : entry.latestError,
+            entry: summarizeReplayQueueEntry(entry),
+        };
+    }
+
+    async resolveReplayQueueEntry(id, resolution) {
+        await this.ensureReady();
+        const normalizedId = typeof id === "string" ? id.trim() : "";
+        if (!normalizedId) {
+            throw new Error("Replay queue entry id is required");
+        }
+
+        const normalizedResolution = typeof resolution === "string" && resolution.trim()
+            ? resolution.trim()
+            : "resolved";
+        if (!["resolved", "discarded"].includes(normalizedResolution)) {
+            throw new Error(`Unsupported replay queue resolution: ${normalizedResolution}`);
+        }
+
+        const entry = this.replayQueue.get(normalizedId);
+        if (!entry) {
+            throw new Error(`Replay queue entry not found: ${normalizedId}`);
+        }
+
+        const now = new Date().toISOString();
+        entry.status = normalizedResolution;
+        entry.resolvedAt = now;
+        entry.updatedAt = now;
+        this.replayQueue.set(entry.id, entry);
+        await this.saveReplayQueue();
+
+        return summarizeReplayQueueEntry(entry);
     }
 
     async postReply(replyTarget, payload) {
