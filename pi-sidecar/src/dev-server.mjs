@@ -704,6 +704,8 @@ const server = createServer(async (_req, res) => {
                     result = skillsRegistry.hasSkill(body.skillName ?? "");
                 } else if (_req.url === "/skills/import-local") {
                     result = await skillsRegistry.importSkill(body.sourcePath ?? "");
+                } else if (_req.url === "/skills/import-github") {
+                    result = await skillsRegistry.importGithubSkill(body.repoInput ?? "");
                 } else if (_req.url === "/skills/remove") {
                     result = await skillsRegistry.removeSkill(body.skillName ?? "");
                 } else {

@@ -1,6 +1,7 @@
-import { cp, mkdir, readdir, readFile, realpath, rm, stat } from "node:fs/promises";
+import { execFile } from "node:child_process";
+import { cp, mkdir, mkdtemp, readdir, readFile, realpath, rm, stat } from "node:fs/promises";
 import { join, basename, relative, resolve, sep } from "node:path";
-import { homedir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 
 function detectSource(root, skillDir) {
     if (root.source && root.source !== "auto") {
@@ -30,6 +31,80 @@ function extractDescription(markdown) {
         );
 
     return lines[0] ?? "";
+}
+
+function runShell(command, options = {}) {
+    return new Promise((resolve) => {
+        execFile(
+            "/bin/bash",
+            ["-lc", command],
+            {
+                cwd: options.cwd,
+                timeout: 30000,
+                maxBuffer: 1024 * 1024 * 4,
+            },
+            (error, stdout, stderr) => {
+                resolve({
+                    ok: !error,
+                    stdout: String(stdout || ""),
+                    stderr: String(stderr || ""),
+                    error: error ? String(error.message || error) : "",
+                });
+            },
+        );
+    });
+}
+
+function isSubpath(parentPath, childPath) {
+    const relPath = relative(parentPath, childPath);
+    return Boolean(relPath) && !relPath.startsWith("..") && !relPath.includes(`${sep}..`);
+}
+
+function normalizeGithubRepoInput(repoInput) {
+    const normalized = String(repoInput || "").trim();
+    if (!normalized) {
+        throw new Error("GitHub 仓库不能为空");
+    }
+
+    const localPath = resolve(normalized);
+    return { normalized, localPath };
+}
+
+function parseGithubSpec(normalizedInput) {
+    if (/^(https?:\/\/)?github\.com\//i.test(normalizedInput)) {
+        const url = new URL(normalizedInput.startsWith("http") ? normalizedInput : `https://${normalizedInput}`);
+        const pathParts = url.pathname.replace(/^\/+|\/+$/g, "").split("/").filter(Boolean);
+        if (pathParts.length < 2) {
+            throw new Error("请输入有效的 GitHub 仓库地址");
+        }
+
+        const owner = pathParts[0];
+        const repo = pathParts[1].replace(/\.git$/i, "");
+        if (pathParts[2] === "tree" && pathParts.length >= 4) {
+            return {
+                cloneSource: `https://github.com/${owner}/${repo}.git`,
+                branch: pathParts[3],
+                skillSubpath: pathParts.slice(4).join("/"),
+            };
+        }
+
+        return {
+            cloneSource: `https://github.com/${owner}/${repo}.git`,
+            branch: "",
+            skillSubpath: pathParts.slice(2).join("/"),
+        };
+    }
+
+    const shorthandMatch = normalizedInput.match(/^([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+)(?:\/(.+))?$/);
+    if (shorthandMatch) {
+        return {
+            cloneSource: `https://github.com/${shorthandMatch[1]}/${shorthandMatch[2].replace(/\.git$/i, "")}.git`,
+            branch: "",
+            skillSubpath: shorthandMatch[3] || "",
+        };
+    }
+
+    return null;
 }
 
 export class SkillsRegistry {
@@ -195,6 +270,65 @@ export class SkillsRegistry {
             imported: true,
             alreadyPresent: false,
         };
+    }
+
+    async importGithubSkill(repoInput) {
+        const { normalized, localPath } = normalizeGithubRepoInput(repoInput);
+        const localRepoStat = await stat(localPath).catch(() => null);
+        const githubSpec = parseGithubSpec(normalized);
+        const cloneSource = localRepoStat?.isDirectory() ? localPath : githubSpec?.cloneSource;
+        const branch = localRepoStat?.isDirectory() ? "" : githubSpec?.branch || "";
+        const explicitSkillSubpath = localRepoStat?.isDirectory() ? "" : githubSpec?.skillSubpath || "";
+
+        if (!cloneSource) {
+            throw new Error("请输入 GitHub 仓库地址或 owner/repo 形式的仓库标识");
+        }
+
+        const tempRoot = await mkdtemp(join(tmpdir(), "sunday-skill-git-"));
+        const cloneDir = join(tempRoot, "repo");
+
+        try {
+            const cloneArgs = ["git", "clone", "--depth", "1"];
+            if (branch) {
+                cloneArgs.push("--branch", branch);
+            }
+            cloneArgs.push(cloneSource, cloneDir);
+
+            const cloneResult = await runShell(cloneArgs.map((part) => `"${String(part).replaceAll("\"", "\\\"")}"`).join(" "));
+            if (!cloneResult.ok) {
+                throw new Error(`拉取仓库失败：${cloneResult.stderr.trim() || cloneResult.error || cloneSource}`);
+            }
+
+            let sourceSkillDir = cloneDir;
+            if (explicitSkillSubpath) {
+                sourceSkillDir = resolve(cloneDir, explicitSkillSubpath);
+                if (!isSubpath(cloneDir, sourceSkillDir)) {
+                    throw new Error("技能路径超出仓库目录");
+                }
+            } else {
+                const skillDirs = await this.collectSkillDirectories(cloneDir);
+                if (skillDirs.length === 0) {
+                    throw new Error("仓库中未找到包含 SKILL.md 的技能目录");
+                }
+
+                if (skillDirs.length > 1) {
+                    const candidates = skillDirs.map((skillDir) => relative(cloneDir, skillDir)).join("，");
+                    throw new Error(`仓库中包含多个技能目录，请指定子目录：${candidates}`);
+                }
+
+                sourceSkillDir = skillDirs[0];
+            }
+
+            const sourceSkillFile = join(sourceSkillDir, "SKILL.md");
+            const skillFileStat = await stat(sourceSkillFile).catch(() => null);
+            if (!skillFileStat?.isFile()) {
+                throw new Error("目标路径中未找到 SKILL.md");
+            }
+
+            return await this.importSkill(sourceSkillDir);
+        } finally {
+            await rm(tempRoot, { recursive: true, force: true }).catch(() => undefined);
+        }
     }
 
     async removeSkill(skillName) {

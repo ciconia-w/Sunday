@@ -779,6 +779,10 @@ export function ensureDevInjectedChannels() {
                 success: false,
                 error: "当前模式不支持导入技能，请在桌面宿主中操作。",
             })),
+            addGithubSkillForWeb: callbackify(async () => ({
+                success: false,
+                error: "当前模式不支持 GitHub 技能导入，请在桌面宿主中操作。",
+            })),
             removeSkill: callbackify(async () => false),
         },
         reportObj: {

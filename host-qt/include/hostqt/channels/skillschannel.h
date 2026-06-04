@@ -21,6 +21,7 @@ public slots:
     bool setSkillEnabled(const QString &skillName, bool enabled);
     bool hasSkill(const QString &skillName) const;
     QJsonObject addSkillForWeb() const;
+    QJsonObject addGithubSkillForWeb(const QString &repoInput) const;
     bool removeSkill(const QString &skillName);
 
 private:
