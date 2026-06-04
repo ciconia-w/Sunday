@@ -8,6 +8,7 @@ const SUPPORTED_REPLY_TRANSPORTS = [
     "dingtalk-bot-webhook",
     "slack-webhook",
     "discord-webhook",
+    "teams-webhook",
 ];
 const MAX_REPLAY_HISTORY_EVENTS = 12;
 
@@ -77,6 +78,12 @@ function normalizeReplyTransport(value) {
 
     if (normalized === "dingtalk-webhook" || normalized === "dingtalk-custom-bot-webhook") {
         return "dingtalk-bot-webhook";
+    }
+
+    if (normalized === "msteams-webhook"
+        || normalized === "microsoft-teams-webhook"
+        || normalized === "teams-incoming-webhook") {
+        return "teams-webhook";
     }
 
     return normalized;
@@ -1183,6 +1190,12 @@ export class ExternalIngress {
         };
     }
 
+    buildTeamsReplyBody(payload) {
+        return {
+            text: formatPlainTextReply(payload),
+        };
+    }
+
     async postGenericWebhookReply(replyTarget, payload) {
         const response = await fetch(replyTarget.url, {
             method: "POST",
@@ -1294,6 +1307,29 @@ export class ExternalIngress {
 
         if (!response.ok) {
             throw new Error(`Discord webhook returned HTTP ${response.status}`);
+        }
+
+        return {
+            ok: true,
+            transport: replyTarget.transport,
+            status: response.status,
+            providerPayload: body,
+        };
+    }
+
+    async postTeamsWebhookReply(replyTarget, payload) {
+        const body = this.buildTeamsReplyBody(payload);
+        const response = await fetch(replyTarget.url, {
+            method: "POST",
+            headers: {
+                "content-type": "application/json; charset=utf-8",
+                ...replyTarget.headers,
+            },
+            body: JSON.stringify(body),
+        });
+
+        if (!response.ok) {
+            throw new Error(`Teams webhook returned HTTP ${response.status}`);
         }
 
         return {
@@ -1550,6 +1586,10 @@ export class ExternalIngress {
 
         if (replyTarget.transport === "discord-webhook") {
             return this.postDiscordWebhookReply(replyTarget, payload);
+        }
+
+        if (replyTarget.transport === "teams-webhook") {
+            return this.postTeamsWebhookReply(replyTarget, payload);
         }
 
         throw new Error(`Unsupported reply transport: ${replyTarget.transport}`);

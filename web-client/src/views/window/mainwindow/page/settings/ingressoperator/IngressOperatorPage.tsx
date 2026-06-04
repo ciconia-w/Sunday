@@ -148,7 +148,7 @@ const createDefaultOperatorState = (): IngressOperatorState => ({
         },
         entries: [],
     },
-    supportedReplyTransports: ["webhook", "lark-bot-webhook", "dingtalk-bot-webhook", "slack-webhook", "discord-webhook"],
+    supportedReplyTransports: ["webhook", "lark-bot-webhook", "dingtalk-bot-webhook", "slack-webhook", "discord-webhook", "teams-webhook"],
     replyRetryPolicy: {
         maxAttempts: 1,
         delaysMs: [],
@@ -225,6 +225,10 @@ function normalizeTransportLabel(transport: string) {
 
     if (transport === "discord-webhook") {
         return "Discord";
+    }
+
+    if (transport === "teams-webhook") {
+        return "Teams";
     }
 
     return transport || "unknown";

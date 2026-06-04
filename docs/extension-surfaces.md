@@ -124,7 +124,7 @@ Current state:
 - headless ingress replies can now be persisted back into conversation history after session completion
 - generic webhook reply push is now available above the ingress contract and can be reused across sidecar restarts
 - first provider-specific adapter is now available via `lark-bot-webhook` / `feishu-bot-webhook`
-- provider-specific webhook adapters now also cover `slack-webhook`, `dingtalk-bot-webhook`, and `discord-webhook`
+- provider-specific webhook adapters now also cover `slack-webhook`, `dingtalk-bot-webhook`, `discord-webhook`, and `teams-webhook`
 - reply delivery now has baseline retry + dead-letter handling in sidecar runtime state
 - persisted replay queue and sidecar operator API now exist for failed reply delivery
 - pending reply deliveries can now be retried by an in-process worker, a sidecar-managed dedicated replay service child process, or a standalone replay service process

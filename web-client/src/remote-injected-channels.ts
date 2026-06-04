@@ -578,7 +578,7 @@ export async function createRemoteInjectedChannels(baseUrl = "") {
                         },
                         entries: [],
                     },
-                    supportedReplyTransports: ["webhook", "lark-bot-webhook", "dingtalk-bot-webhook", "slack-webhook", "discord-webhook"],
+                    supportedReplyTransports: ["webhook", "lark-bot-webhook", "dingtalk-bot-webhook", "slack-webhook", "discord-webhook", "teams-webhook"],
                     replyRetryPolicy: {
                         maxAttempts: 1,
                         delaysMs: [],

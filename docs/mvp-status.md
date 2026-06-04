@@ -134,6 +134,7 @@ Date: 2026-06-03
   - `slack-webhook` provider-specific reply adapter
   - `dingtalk-bot-webhook` / `dingtalk-webhook` / `dingtalk-custom-bot-webhook` provider-specific reply adapter
   - `discord-webhook` / `discord-incoming-webhook` provider-specific reply adapter
+  - `teams-webhook` / `teams-incoming-webhook` / `msteams-webhook` provider-specific reply adapter
   - 最小 reply retry / dead-letter 落盘
   - persisted replay queue
   - `in-process` / `service` / `standalone-service` 三种 background replay 模式

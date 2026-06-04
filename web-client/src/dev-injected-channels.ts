@@ -357,7 +357,7 @@ export function ensureDevInjectedChannels() {
                 counts,
                 entries: visibleReplayEntries,
             },
-            supportedReplyTransports: ["webhook", "lark-bot-webhook", "dingtalk-bot-webhook", "slack-webhook", "discord-webhook"],
+            supportedReplyTransports: ["webhook", "lark-bot-webhook", "dingtalk-bot-webhook", "slack-webhook", "discord-webhook", "teams-webhook"],
             replyRetryPolicy: {
                 maxAttempts: 3,
                 delaysMs: [1000, 3000],
