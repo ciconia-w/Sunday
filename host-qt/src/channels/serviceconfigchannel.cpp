@@ -358,6 +358,17 @@ QJsonObject ServiceConfigChannel::getMcpServices() const
 
     return m_sidecarClient->postJsonValueSync(QStringLiteral("/service-config/get-mcp-services"), QVariantMap()).toObject();
 }
+QJsonObject ServiceConfigChannel::refreshMcpRuntime() const
+{
+    if (!m_sidecarClient) {
+        QJsonObject root;
+        root.insert("success", true);
+        root.insert("services", QJsonArray());
+        return root;
+    }
+
+    return m_sidecarClient->postJsonValueSync(QStringLiteral("/service-config/refresh-mcp-runtime"), QVariantMap()).toObject();
+}
 QJsonObject ServiceConfigChannel::setMcpServiceEnabled(const QString &serviceId, bool enabled) const
 {
     if (!m_sidecarClient) {

@@ -24,6 +24,21 @@ export const MCP_SERVICE_EDITOR_MODE = {
 export type McpServiceEditorMode =
     (typeof MCP_SERVICE_EDITOR_MODE)[keyof typeof MCP_SERVICE_EDITOR_MODE];
 
+export const MCP_RUNTIME_STATUS = {
+    DISABLED: "disabled",
+    READY: "ready",
+    CONNECTING: "connecting",
+    ERROR: "error",
+} as const;
+
+export type McpRuntimeStatus =
+    (typeof MCP_RUNTIME_STATUS)[keyof typeof MCP_RUNTIME_STATUS];
+
+export interface McpToolPreviewItem {
+    name: string;
+    description?: string;
+}
+
 export interface McpService {
     id: string;
     name: string;
@@ -34,6 +49,13 @@ export interface McpService {
     editable: boolean;
     removable: boolean;
     jsonConfig?: string;
+    runtimeStatus?: McpRuntimeStatus;
+    runtimeStatusText?: string;
+    runtimeDetail?: string;
+    toolPreview?: McpToolPreviewItem[];
+    toolCount?: number;
+    transportKind?: string;
+    lastCheckedAt?: string;
 }
 
 export interface McpServiceDraft {

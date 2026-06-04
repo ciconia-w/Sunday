@@ -46,6 +46,7 @@ public slots:
     bool getMcpThirdPartyAgreement() const;
     void setMcpThirdPartyAgreement(bool agreed);
     QJsonObject getMcpServices() const;
+    QJsonObject refreshMcpRuntime() const;
     QJsonObject setMcpServiceEnabled(const QString &serviceId, bool enabled) const;
     QJsonObject saveMcpService(const QString &jsonConfig, const QString &description, const QString &serviceId = QString()) const;
     QJsonObject deleteMcpService(const QString &serviceId) const;

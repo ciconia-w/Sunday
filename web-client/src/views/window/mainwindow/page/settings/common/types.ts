@@ -1,5 +1,15 @@
 import type { McpService } from "@/types/mcp-service";
 
+export const TOOL_STATUS_TONE = {
+    NEUTRAL: "neutral",
+    SUCCESS: "success",
+    WARNING: "warning",
+    ERROR: "error",
+} as const;
+
+export type ToolStatusTone =
+    (typeof TOOL_STATUS_TONE)[keyof typeof TOOL_STATUS_TONE];
+
 /**
  * 工具管理项基础接口
  * 用于 MCP 服务和 Skills 的通用列表展示
@@ -23,6 +33,14 @@ export interface ToolManagementItem {
     removable: boolean;
     /** 附加状态文案 */
     statusText?: string;
+    /** 状态语义 */
+    statusTone?: ToolStatusTone;
+    /** 详情文案 */
+    detailText?: string;
+    /** 工具预览 */
+    toolPreview?: string[];
+    /** 工具总数 */
+    toolCount?: number;
 }
 
 export type ToolManagementCustomActionResolver<T> = T | ((item: ToolManagementItem) => T);
@@ -47,6 +65,17 @@ export interface ToolManagementCustomAction {
  * MCP 服务结构与 ToolManagementItem 几乎一致，直接转换即可
  */
 export function convertMcpServiceToToolItem(service: McpService): ToolManagementItem {
+    let statusTone: ToolStatusTone | undefined;
+    if (service.runtimeStatus === "ready") {
+        statusTone = TOOL_STATUS_TONE.SUCCESS;
+    } else if (service.runtimeStatus === "error") {
+        statusTone = TOOL_STATUS_TONE.ERROR;
+    } else if (service.runtimeStatus === "connecting") {
+        statusTone = TOOL_STATUS_TONE.WARNING;
+    } else if (service.runtimeStatus === "disabled") {
+        statusTone = TOOL_STATUS_TONE.NEUTRAL;
+    }
+
     return {
         id: service.id,
         name: service.name,
@@ -55,6 +84,11 @@ export function convertMcpServiceToToolItem(service: McpService): ToolManagement
         isBuiltIn: service.isBuiltIn,
         editable: service.editable,
         removable: service.removable,
+        statusText: service.runtimeStatusText,
+        statusTone,
+        detailText: service.runtimeDetail,
+        toolPreview: Array.isArray(service.toolPreview) ? service.toolPreview.map((tool) => tool.name).filter(Boolean) : [],
+        toolCount: Number.isFinite(service.toolCount) ? service.toolCount : 0,
     };
 }
 

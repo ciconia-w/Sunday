@@ -538,6 +538,8 @@ const server = createServer(async (_req, res) => {
 
                 if (_req.url === "/service-config/get-mcp-services") {
                     result = await mcpRegistry.getServicesResponse();
+                } else if (_req.url === "/service-config/refresh-mcp-runtime") {
+                    result = await mcpRegistry.refreshRuntimeState();
                 } else if (_req.url === "/service-config/is-mcp-runtime-ready") {
                     result = mcpRegistry.isRuntimeReady();
                 } else if (_req.url === "/service-config/set-mcp-service-enabled") {
