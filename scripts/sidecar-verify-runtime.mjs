@@ -15,6 +15,7 @@ export async function withSidecarRuntime(options, run) {
             PERSONAL_AGENT_PROVIDER: "deepseek",
             PERSONAL_AGENT_MODEL: process.env.PERSONAL_AGENT_MODEL || "deepseek-v4-pro",
             PERSONAL_AGENT_SIDECAR_PORT: String(sidecarPort),
+            ...(options.env ?? {}),
         },
         stdio: "ignore",
     });

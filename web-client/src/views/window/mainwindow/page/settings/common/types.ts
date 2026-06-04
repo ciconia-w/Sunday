@@ -123,7 +123,6 @@ export interface CliToolItem {
 
 export function convertSkillToToolItem(skill: SkillRawItem): ToolManagementItem {
     const isBuiltInSkill = skill.source === "builtin";
-    const isUosAiSkill = skill.source === "uos-ai";
     const sourceText = skill.source === "repo"
         ? "仓库"
         : skill.source === "local"
@@ -136,8 +135,8 @@ export function convertSkillToToolItem(skill: SkillRawItem): ToolManagementItem 
         description: skill.description,
         enabled: skill.enabled,
         isBuiltIn: isBuiltInSkill,
-        editable: !isBuiltInSkill && !isUosAiSkill, // 第三方 skill 支持在文件管理器中打开目录
-        removable: isUosAiSkill, // 仅 uos-ai 来源的技能可删除
+        editable: !isBuiltInSkill,
+        removable: skill.source === "local",
         statusText: sourceText,
         statusTone: sourceText ? TOOL_STATUS_TONE.NEUTRAL : undefined,
         detailText: skill.path,

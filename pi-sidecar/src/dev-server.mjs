@@ -32,6 +32,8 @@ const bridgeDir = resolve(__dirname, "bridge");
 const staticDir = resolve(__dirname, "static");
 const workspaceDir = resolve(process.cwd(), "..");
 const runtimeDir = resolve(process.cwd(), ".pi-sidecar");
+const userSkillsDir = resolve(process.env.PERSONAL_AGENT_SKILLS_USER_DIR || join(homedir(), ".codex", "skills"));
+const repoSkillsDir = resolve(process.env.PERSONAL_AGENT_SKILLS_REPO_DIR || resolve(workspaceDir, "skills"));
 
 const files = [
     "signal.ts",
@@ -123,9 +125,10 @@ const conversationRepository = new ConversationRepository({
 });
 const skillsRegistry = new SkillsRegistry({
     roots: [
-        { dir: join(homedir(), ".codex", "skills"), source: "auto" },
-        { dir: resolve(workspaceDir, "skills"), source: "repo" },
+        { dir: userSkillsDir, source: "auto" },
+        { dir: repoSkillsDir, source: "repo" },
     ],
+    managedRootDir: userSkillsDir,
 });
 const mcpRegistry = new McpRegistry({ runtimeDir });
 const externalIngress = new ExternalIngress({
@@ -686,28 +689,38 @@ const server = createServer(async (_req, res) => {
             raw += chunk;
         });
         _req.on("end", async () => {
-            const body = raw ? JSON.parse(raw) : {};
-            let result = null;
+            try {
+                const body = raw ? JSON.parse(raw) : {};
+                let result = null;
 
-            if (_req.url === "/skills/data") {
-                await skillsRegistry.reload();
-                result = skillsRegistry.getSkills();
-            } else if (_req.url === "/skills/reload") {
-                result = await skillsRegistry.reload();
-            } else if (_req.url === "/skills/set-enabled") {
-                result = skillsRegistry.setSkillEnabled(body.skillName ?? "", body.enabled === true);
-            } else if (_req.url === "/skills/has") {
-                result = skillsRegistry.hasSkill(body.skillName ?? "");
-            } else if (_req.url === "/skills/remove") {
-                result = skillsRegistry.removeSkill(body.skillName ?? "");
-            } else {
-                res.writeHead(404, { "content-type": "application/json; charset=utf-8" });
-                res.end(JSON.stringify({ ok: false, error: "Unknown skills endpoint" }));
-                return;
+                if (_req.url === "/skills/data") {
+                    await skillsRegistry.reload();
+                    result = skillsRegistry.getSkills();
+                } else if (_req.url === "/skills/reload") {
+                    result = await skillsRegistry.reload();
+                } else if (_req.url === "/skills/set-enabled") {
+                    result = skillsRegistry.setSkillEnabled(body.skillName ?? "", body.enabled === true);
+                } else if (_req.url === "/skills/has") {
+                    result = skillsRegistry.hasSkill(body.skillName ?? "");
+                } else if (_req.url === "/skills/import-local") {
+                    result = await skillsRegistry.importSkill(body.sourcePath ?? "");
+                } else if (_req.url === "/skills/remove") {
+                    result = await skillsRegistry.removeSkill(body.skillName ?? "");
+                } else {
+                    res.writeHead(404, { "content-type": "application/json; charset=utf-8" });
+                    res.end(JSON.stringify({ ok: false, error: "Unknown skills endpoint" }));
+                    return;
+                }
+
+                res.writeHead(200, { "content-type": "application/json; charset=utf-8" });
+                res.end(JSON.stringify({ ok: true, result }));
+            } catch (error) {
+                res.writeHead(200, { "content-type": "application/json; charset=utf-8" });
+                res.end(JSON.stringify({
+                    ok: false,
+                    error: error instanceof Error ? error.message : "Skills operation failed",
+                }));
             }
-
-            res.writeHead(200, { "content-type": "application/json; charset=utf-8" });
-            res.end(JSON.stringify({ ok: true, result }));
         });
         return;
     }

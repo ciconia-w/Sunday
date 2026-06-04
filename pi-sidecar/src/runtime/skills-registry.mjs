@@ -1,5 +1,5 @@
-import { readdir, readFile } from "node:fs/promises";
-import { join, basename, relative, sep } from "node:path";
+import { cp, mkdir, readdir, readFile, realpath, rm, stat } from "node:fs/promises";
+import { join, basename, relative, resolve, sep } from "node:path";
 import { homedir } from "node:os";
 
 function detectSource(root, skillDir) {
@@ -46,6 +46,10 @@ export class SkillsRegistry {
                 source: root.source ?? "auto",
             };
         });
+        this.managedRootDir = options.managedRootDir
+            ?? this.roots.find((root) => root.source === "auto")?.dir
+            ?? this.roots[0]?.dir
+            ?? join(homedir(), ".codex", "skills");
         this.skills = [];
         this.enabledByName = new Map();
     }
@@ -116,12 +120,98 @@ export class SkillsRegistry {
         return this.skills.some((item) => item.name === skillName);
     }
 
-    removeSkill(skillName) {
-        const index = this.skills.findIndex((item) => item.name === skillName);
-        if (index < 0) {
+    async importSkill(sourcePath) {
+        const normalizedInput = typeof sourcePath === "string" ? sourcePath.trim() : "";
+        if (!normalizedInput) {
+            throw new Error("技能目录不能为空");
+        }
+
+        await this.reload();
+
+        const resolvedInput = resolve(normalizedInput);
+        let sourceSkillDir = resolvedInput;
+        let sourceStat = await stat(sourceSkillDir).catch(() => null);
+
+        if (!sourceStat) {
+            throw new Error("所选技能目录不存在");
+        }
+
+        if (!sourceStat.isDirectory() && basename(sourceSkillDir) === "SKILL.md") {
+            sourceSkillDir = resolve(sourceSkillDir, "..");
+            sourceStat = await stat(sourceSkillDir).catch(() => null);
+        }
+
+        if (!sourceStat?.isDirectory()) {
+            throw new Error("请选择包含 SKILL.md 的技能目录");
+        }
+
+        const sourceSkillFile = join(sourceSkillDir, "SKILL.md");
+        const skillFileStat = await stat(sourceSkillFile).catch(() => null);
+        if (!skillFileStat?.isFile()) {
+            throw new Error("所选目录缺少 SKILL.md");
+        }
+
+        const skillName = basename(sourceSkillDir);
+        const existingSkill = this.skills.find((item) => item.name === skillName);
+        if (existingSkill) {
+            const [existingRealPath, sourceRealPath] = await Promise.all([
+                realpath(existingSkill.path).catch(() => existingSkill.path),
+                realpath(sourceSkillDir).catch(() => sourceSkillDir),
+            ]);
+
+            if (existingRealPath === sourceRealPath) {
+                return {
+                    ...existingSkill,
+                    imported: false,
+                    alreadyPresent: true,
+                };
+            }
+
+            throw new Error(`技能已存在：${skillName}`);
+        }
+
+        await mkdir(this.managedRootDir, { recursive: true });
+        const destinationPath = join(this.managedRootDir, skillName);
+        const destinationStat = await stat(destinationPath).catch(() => null);
+        if (destinationStat) {
+            throw new Error(`目标目录已存在：${destinationPath}`);
+        }
+
+        await cp(sourceSkillDir, destinationPath, {
+            recursive: true,
+            force: false,
+            errorOnExist: true,
+        });
+
+        await this.reload();
+
+        const importedSkill = this.skills.find((item) => item.name === skillName);
+        if (!importedSkill) {
+            throw new Error(`导入后未找到技能：${skillName}`);
+        }
+
+        return {
+            ...importedSkill,
+            imported: true,
+            alreadyPresent: false,
+        };
+    }
+
+    async removeSkill(skillName) {
+        const skill = this.skills.find((item) => item.name === skillName);
+        if (!skill || skill.source !== "local") {
             return false;
         }
-        this.skills.splice(index, 1);
+
+        const managedRootRealPath = await realpath(this.managedRootDir).catch(() => this.managedRootDir);
+        const skillRealPath = await realpath(skill.path).catch(() => skill.path);
+        const relativeToManagedRoot = relative(managedRootRealPath, skillRealPath);
+        if (!relativeToManagedRoot || relativeToManagedRoot.startsWith("..") || relativeToManagedRoot.includes(`${sep}..`)) {
+            return false;
+        }
+
+        await rm(skill.path, { recursive: true, force: true });
+        this.skills = this.skills.filter((item) => item.name !== skillName);
         this.enabledByName.delete(skillName);
         return true;
     }

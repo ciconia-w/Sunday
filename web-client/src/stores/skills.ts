@@ -22,9 +22,9 @@ export const useSkillsStore = defineStore("skills", {
     }),
 
     getters: {
-        /** 获取可删除的自定义技能列表 */
+        /** 获取用户导入的本地技能列表 */
         customSkills: (state) => {
-            return state.skills.filter((skill) => skill.source === "uos-ai");
+            return state.skills.filter((skill) => skill.source === "local");
         },
 
         /** 获取转换后的工具管理列表项 */
@@ -110,7 +110,7 @@ export const useSkillsStore = defineStore("skills", {
 
         /**
          * 删除技能
-         * 仅支持删除 source 为 uos-ai 的技能
+         * 仅支持删除用户导入的本地技能
          * @param skillName 技能名称
          */
         async deleteSkill(skillName: string) {
@@ -137,7 +137,7 @@ export const useSkillsStore = defineStore("skills", {
         async hasSkill(skillName: string): Promise<boolean> {
             try {
                 const backend = getBackendStore();
-                return await backend.requestSkillsMgr("hasSkill", skillName);
+                return Boolean(await backend.requestSkillsMgr("hasSkill", skillName));
             } catch (error) {
                 console.error(`[skillsStore] Failed to check skill "${skillName}"`, error);
                 return false;

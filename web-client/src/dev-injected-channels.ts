@@ -775,7 +775,10 @@ export function ensureDevInjectedChannels() {
             reloadSkills: callbackify(async () => undefined),
             setSkillEnabled: callbackify(async () => true),
             hasSkill: callbackify(async () => false),
-            addSkillForWeb: callbackify(async () => ({ success: false, error: "not implemented" })),
+            addSkillForWeb: callbackify(async () => ({
+                success: false,
+                error: "当前模式不支持导入技能，请在桌面宿主中操作。",
+            })),
             removeSkill: callbackify(async () => false),
         },
         reportObj: {
