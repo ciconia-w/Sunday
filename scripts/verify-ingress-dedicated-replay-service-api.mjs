@@ -1,5 +1,5 @@
 import { createServer } from "node:http";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { withSidecarRuntime } from "./sidecar-verify-runtime.mjs";
@@ -109,27 +109,43 @@ async function waitForSessionFinish(events, sessionId, expectedFinishCount, time
     };
 }
 
-async function waitForReplayEntry(baseUrl, predicate, timeoutMs = 15000) {
+async function waitForCallCount(getCalls, expectedCount, timeoutMs = 15000) {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+        const calls = getCalls();
+        if (calls.length >= expectedCount) {
+            return calls.slice(0, expectedCount);
+        }
+        await wait(250);
+    }
+    return getCalls();
+}
+
+async function waitForSuccessfulCall(getCalls, timeoutMs = 15000) {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+        const call = [...getCalls()].reverse().find((item) => item.status === 200);
+        if (call) {
+            return call;
+        }
+        await wait(250);
+    }
+    return [...getCalls()].reverse().find((item) => item.status === 200) ?? null;
+}
+
+async function waitForOperatorState(baseUrl, predicate, timeoutMs = 15000) {
     const deadline = Date.now() + timeoutMs;
     let latest = null;
 
     while (Date.now() < deadline) {
         latest = await post(baseUrl, "/service-config/get-ingress-operator-state", { includeResolved: true });
-        const entries = latest?.body?.result?.replayQueue?.entries ?? [];
-        const match = entries.find(predicate);
-        if (match) {
-            return {
-                response: latest,
-                entry: match,
-            };
+        if (predicate(latest?.body?.result)) {
+            return latest;
         }
         await wait(250);
     }
 
-    return {
-        response: latest,
-        entry: null,
-    };
+    return latest;
 }
 
 async function withSlackCollector(run) {
@@ -174,25 +190,13 @@ async function withSlackCollector(run) {
     const address = server.address();
     const port = address && typeof address === "object" ? address.port : 0;
 
-    async function waitForCallCount(expectedCount, timeoutMs = 15000) {
-        const deadline = Date.now() + timeoutMs;
-        while (Date.now() < deadline) {
-            if (calls.length >= expectedCount) {
-                return calls.slice(0, expectedCount);
-            }
-            await wait(250);
-        }
-        return [...calls];
-    }
-
     try {
         return await run({
             webhookUrl: `http://127.0.0.1:${port}/reply-slack`,
-            calls,
+            getCalls: () => [...calls],
             setDeliveryMode(mode) {
                 deliveryMode = mode;
             },
-            waitForCallCount,
         });
     } finally {
         await new Promise((resolve) => {
@@ -201,42 +205,59 @@ async function withSlackCollector(run) {
     }
 }
 
-const runtimeDir = await mkdtemp(join(tmpdir(), "sunday-ingress-operator-service-config-verify-"));
+const runtimeDir = await mkdtemp(join(tmpdir(), "sunday-ingress-dedicated-replay-service-verify-"));
+const statusPath = join(runtimeDir, "external-ingress-replay-service-status.json");
 const now = Date.now();
-const source = "im-operator-ui";
-const channelId = `operator-ui-channel-${now}`;
-const threadId = `operator-ui-thread-${now}`;
+const source = "im-replay-service-demo";
+const channelId = `replay-service-channel-${now}`;
+const threadId = `replay-service-thread-${now}`;
 
 try {
-    let initialState = null;
-    let replayActionResult = null;
-    let resolvedState = null;
-    let hiddenResolvedState = null;
+    let initialOperatorState = null;
+    let operatorStateAfterDelivery = null;
+    let ingressResult = null;
+    let serviceStatusFile = null;
+    let replayEntry = null;
     let finalWebhookCall = null;
+    let observedSidecarPid = 0;
 
-    await withSlackCollector(async ({ webhookUrl, calls, setDeliveryMode, waitForCallCount }) => {
+    await withSlackCollector(async ({ webhookUrl, getCalls, setDeliveryMode }) => {
         await withSidecarRuntime(
             {
-                sidecarPort: 8811,
+                sidecarPort: 8813,
                 env: {
                     PERSONAL_AGENT_RUNTIME_DIR: runtimeDir,
-                    PERSONAL_AGENT_INGRESS_REPLY_RETRY_DELAYS_MS: "20,40",
-                    PERSONAL_AGENT_INGRESS_BACKGROUND_REPLAY_ENABLED: "0",
+                    PERSONAL_AGENT_INGRESS_REPLY_RETRY_DELAYS_MS: "5,10",
+                    PERSONAL_AGENT_INGRESS_BACKGROUND_REPLAY_ENABLED: "1",
+                    PERSONAL_AGENT_INGRESS_BACKGROUND_REPLAY_MODE: "service",
+                    PERSONAL_AGENT_INGRESS_BACKGROUND_REPLAY_DELAYS_MS: "60,120",
+                    PERSONAL_AGENT_INGRESS_BACKGROUND_REPLAY_POLL_MS: "20",
                 },
             },
-            async ({ sidecarPort }) => {
+            async ({ sidecarPort, sidecarPid }) => {
                 const baseUrl = `http://127.0.0.1:${sidecarPort}`;
+                observedSidecarPid = sidecarPid;
                 const collector = await createEventCollector(baseUrl);
 
                 try {
-                    const ingressResult = await post(baseUrl, "/ingress/message", {
+                    const readyOperatorState = await waitForOperatorState(
+                        baseUrl,
+                        (state) =>
+                            state?.backgroundReplay?.mode === "service"
+                            && state?.backgroundReplay?.serviceStatus?.running === true
+                            && Number(state?.backgroundReplay?.serviceStatus?.pid ?? 0) > 0
+                            && Number(state?.backgroundReplay?.serviceStatus?.pid ?? 0) !== sidecarPid,
+                    );
+                    initialOperatorState = readyOperatorState?.body?.result ?? null;
+
+                    ingressResult = await post(baseUrl, "/ingress/message", {
                         source,
                         channelId,
                         threadId,
                         userId: "demo-user",
                         assistantId: "uos-ai-generic",
-                        text: "Reply with exactly: ingress-operator-ui-ok",
-                        externalMessageId: `operator-ui-external-${now}`,
+                        text: "Reply with exactly: ingress-replay-service-ok",
+                        externalMessageId: `replay-service-external-${now}`,
                         replyTransport: "slack-webhook",
                         replyWebhookUrl: webhookUrl,
                     });
@@ -244,38 +265,29 @@ try {
                     collector.watchedSessionIds.add(ingressResult.body.sessionId);
                     const cycle = await waitForSessionFinish(collector.events, ingressResult.body.sessionId, 1);
                     if (!cycle.ok) {
-                        throw new Error(`service-config operator verifier session did not finish: ${cycle.reason}`);
+                        throw new Error(`dedicated replay service verifier session did not finish: ${cycle.reason}`);
                     }
 
-                    await waitForCallCount(3);
-
-                    const replayEntry = await waitForReplayEntry(
-                        baseUrl,
-                        (entry) => entry.routeKey === `${source}:${channelId}:${threadId}`,
-                    );
-                    if (!replayEntry.entry?.id) {
-                        throw new Error("service-config operator verifier did not find replay queue entry");
-                    }
-
-                    initialState = await post(baseUrl, "/service-config/get-ingress-operator-state", {
-                        includeResolved: true,
-                    });
-
+                    await waitForCallCount(getCalls, 3);
                     setDeliveryMode("success");
-                    replayActionResult = await post(baseUrl, "/service-config/replay-ingress-queue-entry", {
-                        id: replayEntry.entry.id,
-                    });
-                    await waitForCallCount(4);
-                    finalWebhookCall = calls[calls.length - 1] ?? null;
 
-                    resolvedState = await post(baseUrl, "/service-config/resolve-ingress-queue-entry", {
-                        id: replayEntry.entry.id,
-                        resolution: "resolved",
-                    });
+                    const deliveredState = await waitForOperatorState(
+                        baseUrl,
+                        (state) => {
+                            const match = (state?.replayQueue?.entries ?? []).find(
+                                (entry) => entry.routeKey === `${source}:${channelId}:${threadId}`,
+                            );
+                            return match?.status === "delivered" && Number(match?.automaticReplayCount ?? 0) >= 1;
+                        },
+                        15000,
+                    );
 
-                    hiddenResolvedState = await post(baseUrl, "/service-config/get-ingress-operator-state", {
-                        includeResolved: false,
-                    });
+                    operatorStateAfterDelivery = deliveredState?.body?.result ?? null;
+                    replayEntry = (operatorStateAfterDelivery?.replayQueue?.entries ?? []).find(
+                        (entry) => entry.routeKey === `${source}:${channelId}:${threadId}`,
+                    ) ?? null;
+                    finalWebhookCall = await waitForSuccessfulCall(getCalls);
+                    serviceStatusFile = JSON.parse(await readFile(statusPath, "utf8"));
                 } finally {
                     await collector.close();
                 }
@@ -283,53 +295,37 @@ try {
         );
     });
 
-    const initialPayload = initialState?.body?.result ?? {};
-    const initialEntries = initialPayload?.replayQueue?.entries ?? [];
-    const initialEntry = initialEntries.find((entry) => entry.routeKey === `${source}:${channelId}:${threadId}`) ?? null;
-    const replayPayload = replayActionResult?.body?.result ?? {};
-    const resolvedPayload = resolvedState?.body?.result ?? {};
-    const hiddenEntries = hiddenResolvedState?.body?.result?.replayQueue?.entries ?? [];
-    const hiddenCounts = hiddenResolvedState?.body?.result?.replayQueue?.counts ?? {};
+    const serviceStatus = operatorStateAfterDelivery?.backgroundReplay?.serviceStatus ?? null;
+    const checks = {
+        ingressAccepted: ingressResult?.body?.ok === true,
+        operatorStateUsesServiceMode: initialOperatorState?.backgroundReplay?.mode === "service",
+        serviceReportedAsDedicated: initialOperatorState?.backgroundReplay?.hasDedicatedReplayService === true,
+        servicePidDiffersFromSidecar: Number(initialOperatorState?.backgroundReplay?.serviceStatus?.pid ?? 0) > 0
+            && Number(initialOperatorState?.backgroundReplay?.serviceStatus?.pid ?? 0) !== observedSidecarPid,
+        serviceRunning: serviceStatus?.running === true,
+        replayEntryDelivered: replayEntry?.status === "delivered",
+        replayEntryWasAutoRetried: Number(replayEntry?.automaticReplayCount ?? 0) >= 1,
+        finalWebhookCallSucceeded: finalWebhookCall?.status === 200,
+        finalWebhookCallContainsSlackText: finalWebhookCall?.body?.text === "ingress-replay-service-ok",
+        statusFileTracksHeartbeat: typeof serviceStatusFile?.lastHeartbeatAt === "string" && Boolean(serviceStatusFile.lastHeartbeatAt),
+        statusFileTracksRun: typeof serviceStatusFile?.lastRunAt === "string" && Boolean(serviceStatusFile.lastRunAt),
+    };
 
-    const verdict =
-        initialState?.status === 200 &&
-        initialState?.body?.ok === true &&
-        Array.isArray(initialPayload.routes) &&
-        initialPayload.routes.some((route) => route.routeKey === `${source}:${channelId}:${threadId}`) &&
-        Array.isArray(initialPayload.supportedReplyTransports) &&
-        initialPayload.supportedReplyTransports.includes("slack-webhook") &&
-        initialPayload.supportedReplyTransports.includes("discord-webhook") &&
-        initialPayload.backgroundReplay?.mode === "in-process" &&
-        initialPayload.backgroundReplay?.serviceStatus?.enabled === false &&
-        typeof initialPayload.runtimeNote === "string" &&
-        initialPayload.runtimeNote.includes("background replay") &&
-        initialEntry?.status === "pending" &&
-        replayActionResult?.status === 200 &&
-        replayActionResult?.body?.ok === true &&
-        replayPayload?.ok === true &&
-        replayPayload?.entry?.status === "delivered" &&
-        replayPayload?.automatic === false &&
-        resolvedState?.status === 200 &&
-        resolvedState?.body?.ok === true &&
-        resolvedPayload?.status === "resolved" &&
-        hiddenResolvedState?.status === 200 &&
-        hiddenResolvedState?.body?.ok === true &&
-        hiddenEntries.length === 0 &&
-        hiddenCounts.total === 0 &&
-        finalWebhookCall?.body?.text === "ingress-operator-ui-ok";
+    const verdict = Object.values(checks).every(Boolean)
+        ? "ingress-dedicated-replay-service-api-confirmed"
+        : "ingress-dedicated-replay-service-api-incomplete";
 
     console.log(JSON.stringify({
-        initialState,
-        replayActionResult,
-        resolvedState,
-        hiddenResolvedState,
+        initialOperatorState,
+        operatorStateAfterDelivery,
+        replayEntry,
         finalWebhookCall,
-        verdict: verdict
-            ? "ingress-operator-service-config-api-confirmed"
-            : "ingress-operator-service-config-api-incomplete",
+        serviceStatusFile,
+        checks,
+        verdict,
     }, null, 2));
 
-    process.exit(verdict ? 0 : 1);
+    process.exit(verdict === "ingress-dedicated-replay-service-api-confirmed" ? 0 : 1);
 } finally {
     await rm(runtimeDir, { recursive: true, force: true });
 }

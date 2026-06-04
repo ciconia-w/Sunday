@@ -3,11 +3,13 @@ import { join } from "node:path";
 import { repoRoot } from "./paths.mjs";
 
 const externalIngressPath = join(repoRoot, "pi-sidecar", "src", "runtime", "external-ingress.mjs");
+const ingressReplayWorkerPath = join(repoRoot, "pi-sidecar", "src", "runtime", "ingress-replay-worker.mjs");
 const devServerPath = join(repoRoot, "pi-sidecar", "src", "dev-server.mjs");
 const ingressDocPath = join(repoRoot, "docs", "external-ingress.md");
 
-const [externalIngressSource, devServerSource, ingressDocSource] = await Promise.all([
+const [externalIngressSource, ingressReplayWorkerSource, devServerSource, ingressDocSource] = await Promise.all([
     readFile(externalIngressPath, "utf8"),
+    readFile(ingressReplayWorkerPath, "utf8"),
     readFile(devServerPath, "utf8"),
     readFile(ingressDocPath, "utf8"),
 ]);
@@ -28,6 +30,9 @@ const checks = {
     ingressSupportsSlackWebhookTransport: externalIngressSource.includes("slack-webhook")
         && externalIngressSource.includes("buildSlackReplyBody")
         && externalIngressSource.includes("postSlackWebhookReply"),
+    ingressSupportsDiscordWebhookTransport: externalIngressSource.includes("discord-webhook")
+        && externalIngressSource.includes("buildDiscordReplyBody")
+        && externalIngressSource.includes("postDiscordWebhookReply"),
     ingressPushesReplyOnFinish: externalIngressSource.includes("handleSessionFinished")
         && externalIngressSource.includes("postReply"),
     ingressPushesErrorOnFailure: externalIngressSource.includes("handleSessionError")
@@ -44,6 +49,13 @@ const checks = {
         && externalIngressSource.includes("backgroundReplayDelaysMs")
         && externalIngressSource.includes("startBackgroundReplayLoop")
         && externalIngressSource.includes("runDueBackgroundReplays"),
+    ingressSupportsDedicatedReplayServiceMode: externalIngressSource.includes("backgroundReplayMode")
+        && externalIngressSource.includes("usesDedicatedBackgroundReplayService")
+        && externalIngressSource.includes("serviceStatus")
+        && externalIngressSource.includes("runtimeNote"),
+    ingressReplayWorkerPollsOperatorApi: ingressReplayWorkerSource.includes("/ingress/get-replay-queue")
+        && ingressReplayWorkerSource.includes("/ingress/replay-queue/replay")
+        && ingressReplayWorkerSource.includes("getBackgroundReplayServiceStatusPath"),
     headlessRepliesPersistOnFinish: devServerSource.includes("persistHeadlessSessionRender")
         && devServerSource.includes("setConversationRender")
         && devServerSource.includes("saveConversation(current.conversationId)"),
@@ -54,6 +66,9 @@ const checks = {
         && devServerSource.includes("/ingress/get-replay-queue")
         && devServerSource.includes("/ingress/replay-queue/replay")
         && devServerSource.includes("/ingress/replay-queue/resolve"),
+    devServerSupervisesReplayService: devServerSource.includes("ingress-replay-worker.mjs")
+        && devServerSource.includes("setBackgroundReplayServiceSupervisorStateProvider")
+        && devServerSource.includes("startIngressReplayServiceWorker"),
     docExplainsThreadRouting: ingressDocSource.includes("threadId")
         && ingressDocSource.includes("同一 thread")
         && ingressDocSource.includes("/ingress/message"),
@@ -67,6 +82,9 @@ const checks = {
     docExplainsSlackAndBackgroundReplay: ingressDocSource.includes("slack-webhook")
         && ingressDocSource.includes("background replay")
         && ingressDocSource.includes("PERSONAL_AGENT_INGRESS_BACKGROUND_REPLAY_DELAYS_MS"),
+    docExplainsDiscordAndReplayService: ingressDocSource.includes("discord-webhook")
+        && ingressDocSource.includes("PERSONAL_AGENT_INGRESS_BACKGROUND_REPLAY_MODE")
+        && ingressDocSource.includes("external-ingress-replay-service-status.json"),
     docExplainsReplayOperatorSurface: ingressDocSource.includes("external-ingress-replay-queue.json")
         && ingressDocSource.includes("/ingress/get-replay-queue")
         && ingressDocSource.includes("/ingress/replay-queue/replay")

@@ -124,17 +124,17 @@ Current state:
 - headless ingress replies can now be persisted back into conversation history after session completion
 - generic webhook reply push is now available above the ingress contract and can be reused across sidecar restarts
 - first provider-specific adapter is now available via `lark-bot-webhook` / `feishu-bot-webhook`
+- provider-specific webhook adapters now also cover `slack-webhook` and `discord-webhook`
 - reply delivery now has baseline retry + dead-letter handling in sidecar runtime state
 - persisted replay queue and sidecar operator API now exist for failed reply delivery
-- a second provider-specific adapter now exists via `slack-webhook`
-- pending reply deliveries can now be retried by an in-process background replay worker
+- pending reply deliveries can now be retried by either an in-process worker or a dedicated replay service child process
 - extension workspace now also has a minimal `IM Bridge` operator UI backed by `serviceConfig`
 
 Current gaps:
 
 - platform-specific bridge logic still needs to be layered on top of the generic ingress contract
 - provider coverage is still narrow; broader platform coverage is still missing
-- retry policy is still minimal and in-process only; there is no dedicated replay service yet
+- retry policy is still minimal; the current dedicated replay service is a sidecar-managed child process, not a fully standalone service
 
 Recommended next step:
 

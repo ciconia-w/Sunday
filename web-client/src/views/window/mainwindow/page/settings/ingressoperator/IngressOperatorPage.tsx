@@ -83,6 +83,16 @@ interface IngressOperatorState {
         delaysMs: number[];
         mode: string;
         hasDedicatedReplayService: boolean;
+        serviceStatus: {
+            enabled: boolean;
+            running: boolean;
+            pid: number;
+            restartCount: number;
+            startedAt: string;
+            lastHeartbeatAt: string;
+            lastRunAt: string;
+            lastError: string;
+        };
     };
     runtimeNote: string;
 }
@@ -105,7 +115,7 @@ const createDefaultOperatorState = (): IngressOperatorState => ({
         },
         entries: [],
     },
-    supportedReplyTransports: ["webhook", "lark-bot-webhook", "slack-webhook"],
+    supportedReplyTransports: ["webhook", "lark-bot-webhook", "slack-webhook", "discord-webhook"],
     replyRetryPolicy: {
         maxAttempts: 1,
         delaysMs: [],
@@ -116,6 +126,16 @@ const createDefaultOperatorState = (): IngressOperatorState => ({
         delaysMs: [],
         mode: "in-process",
         hasDedicatedReplayService: false,
+        serviceStatus: {
+            enabled: false,
+            running: false,
+            pid: 0,
+            restartCount: 0,
+            startedAt: "",
+            lastHeartbeatAt: "",
+            lastRunAt: "",
+            lastError: "",
+        },
     },
     runtimeNote: "当前没有可用的 ingress operator 状态。",
 });
@@ -148,6 +168,10 @@ function normalizeTransportLabel(transport: string) {
 
     if (transport === "webhook") {
         return "Generic Webhook";
+    }
+
+    if (transport === "discord-webhook") {
+        return "Discord";
     }
 
     return transport || "unknown";
@@ -193,6 +217,14 @@ export default defineComponent({
                             ...(state?.replayQueue?.counts || {}),
                         },
                         entries: Array.isArray(state?.replayQueue?.entries) ? state.replayQueue.entries : [],
+                    },
+                    backgroundReplay: {
+                        ...createDefaultOperatorState().backgroundReplay,
+                        ...(state?.backgroundReplay || {}),
+                        serviceStatus: {
+                            ...createDefaultOperatorState().backgroundReplay.serviceStatus,
+                            ...(state?.backgroundReplay?.serviceStatus || {}),
+                        },
                     },
                     routes: Array.isArray(state?.routes) ? state.routes : [],
                     supportedReplyTransports: Array.isArray(state?.supportedReplyTransports)
@@ -290,6 +322,22 @@ export default defineComponent({
         const supportedTransportText = computed(() =>
             operatorState.value.supportedReplyTransports.map(normalizeTransportLabel).join(" / "),
         );
+        const workerRuntimeText = computed(() => {
+            if (!operatorState.value.backgroundReplay.hasDedicatedReplayService) {
+                return "由 sidecar 进程内 worker 驱动";
+            }
+
+            const serviceStatus = operatorState.value.backgroundReplay.serviceStatus;
+            if (!serviceStatus.enabled) {
+                return "未启用";
+            }
+
+            if (!serviceStatus.running) {
+                return "未运行";
+            }
+
+            return serviceStatus.pid > 0 ? `运行中 (PID ${serviceStatus.pid})` : "运行中";
+        });
         const summaryBadges = computed(() => [
             {
                 key: "routes",
@@ -354,6 +402,7 @@ export default defineComponent({
             refreshButtonText,
             workerModeText,
             supportedTransportText,
+            workerRuntimeText,
             summaryBadges,
             canReplayEntry,
             canResolveEntry,
@@ -440,6 +489,18 @@ export default defineComponent({
                                                         : "未启用"}
                                                 </div>
                                             </div>
+                                            <div class="ingress-operator-page__fact-item" data-ingress-operator-service-runtime>
+                                                <div class="ingress-operator-page__fact-label">Worker 状态</div>
+                                                <div class="ingress-operator-page__fact-value">{this.workerRuntimeText}</div>
+                                            </div>
+                                            {this.operatorState.backgroundReplay.hasDedicatedReplayService && (
+                                                <div class="ingress-operator-page__fact-item" data-ingress-operator-service-heartbeat>
+                                                    <div class="ingress-operator-page__fact-label">最近心跳</div>
+                                                    <div class="ingress-operator-page__fact-value">
+                                                        {this.formatTimeLabel(this.operatorState.backgroundReplay.serviceStatus.lastHeartbeatAt) || "-"}
+                                                    </div>
+                                                </div>
+                                            )}
                                         </div>
                                         <div class="ingress-operator-page__note" data-ingress-operator-runtime-note>
                                             {this.operatorState.runtimeNote}

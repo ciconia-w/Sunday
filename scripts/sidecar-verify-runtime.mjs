@@ -22,7 +22,10 @@ export async function withSidecarRuntime(options, run) {
 
     try {
         await waitForHttp(`http://127.0.0.1:${sidecarPort}/state`);
-        return await run({ sidecarPort });
+        return await run({
+            sidecarPort,
+            sidecarPid: sidecar.pid ?? 0,
+        });
     } finally {
         if (!sidecar.killed) {
             sidecar.kill("SIGTERM");

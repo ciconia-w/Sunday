@@ -1,6 +1,7 @@
 import { createServer } from "node:http";
 import { readFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
+import { spawn } from "node:child_process";
 import { dirname, join, resolve } from "node:path";
 import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
@@ -142,6 +143,14 @@ const externalIngress = new ExternalIngress({
     runtimeDir,
 });
 
+const ingressReplayService = {
+    child: null,
+    restartCount: 0,
+    lastError: "",
+    stopping: false,
+    restartTimer: null,
+};
+
 function normalizeRuntimeModelId(modelId) {
     if (typeof modelId !== "string") {
         return "";
@@ -193,6 +202,98 @@ async function refreshDerivedState() {
 }
 
 reloadRuntimeConfig();
+
+function clearIngressReplayServiceRestartTimer() {
+    if (!ingressReplayService.restartTimer) {
+        return;
+    }
+
+    clearTimeout(ingressReplayService.restartTimer);
+    ingressReplayService.restartTimer = null;
+}
+
+function getIngressReplayServiceSupervisorState() {
+    return {
+        running: Boolean(
+            ingressReplayService.child
+            && ingressReplayService.child.exitCode === null
+            && ingressReplayService.child.signalCode === null,
+        ),
+        pid: ingressReplayService.child?.pid ?? 0,
+        restartCount: ingressReplayService.restartCount,
+        lastError: ingressReplayService.lastError,
+    };
+}
+
+function stopIngressReplayServiceWorker() {
+    ingressReplayService.stopping = true;
+    clearIngressReplayServiceRestartTimer();
+
+    const child = ingressReplayService.child;
+    if (!child || child.killed) {
+        return;
+    }
+
+    child.kill("SIGTERM");
+    setTimeout(() => {
+        if (child.exitCode === null && child.signalCode === null) {
+            child.kill("SIGKILL");
+        }
+    }, 400).unref?.();
+}
+
+function startIngressReplayServiceWorker(baseUrl) {
+    if (!externalIngress.usesDedicatedBackgroundReplayService()) {
+        return;
+    }
+
+    ingressReplayService.stopping = false;
+
+    const spawnWorker = () => {
+        if (ingressReplayService.stopping) {
+            return;
+        }
+
+        const child = spawn("node", ["./src/runtime/ingress-replay-worker.mjs"], {
+            cwd: process.cwd(),
+            env: {
+                ...process.env,
+                PERSONAL_AGENT_INGRESS_REPLAY_SERVICE_BASE_URL: baseUrl,
+            },
+            stdio: "ignore",
+        });
+
+        ingressReplayService.child = child;
+        ingressReplayService.lastError = "";
+
+        child.on("error", (error) => {
+            ingressReplayService.lastError = error instanceof Error ? error.message : String(error);
+        });
+
+        child.on("exit", (code, signal) => {
+            if (ingressReplayService.child === child) {
+                ingressReplayService.child = null;
+            }
+
+            if (ingressReplayService.stopping) {
+                return;
+            }
+
+            ingressReplayService.restartCount += 1;
+            ingressReplayService.lastError = `replay worker exited (${code !== null ? `code ${code}` : `signal ${signal || "unknown"}`})`;
+            clearIngressReplayServiceRestartTimer();
+            ingressReplayService.restartTimer = setTimeout(spawnWorker, 250);
+            ingressReplayService.restartTimer.unref?.();
+        });
+    };
+
+    spawnWorker();
+}
+
+externalIngress.setBackgroundReplayServiceSupervisorStateProvider(getIngressReplayServiceSupervisorState);
+process.on("SIGTERM", stopIngressReplayServiceWorker);
+process.on("SIGINT", stopIngressReplayServiceWorker);
+process.on("exit", stopIngressReplayServiceWorker);
 
 function emitSession(event, sessionId, message) {
     const payload = `event: session\ndata: ${JSON.stringify({ event, sessionId, message })}\n\n`;
@@ -846,7 +947,9 @@ const server = createServer(async (_req, res) => {
                         includeResolved: body.includeResolved === true,
                     });
                 } else if (_req.url === "/ingress/replay-queue/replay") {
-                    result = await externalIngress.replayQueuedReply(body.id ?? "");
+                    result = await externalIngress.replayQueuedReply(body.id ?? "", {
+                        automatic: body.automatic === true,
+                    });
                 } else if (_req.url === "/ingress/replay-queue/resolve") {
                     result = await externalIngress.resolveReplayQueueEntry(body.id ?? "", body.resolution ?? "");
                 } else {
@@ -1028,6 +1131,7 @@ const server = createServer(async (_req, res) => {
 
 const port = Number(process.env.PERSONAL_AGENT_SIDECAR_PORT || "8787");
 server.listen(port, () => {
+    startIngressReplayServiceWorker(`http://127.0.0.1:${port}`);
     console.log(
         `[personal-agent-desktop] sidecar listening on http://127.0.0.1:${port} in ${runtimeConfig.mode} mode (${runtimeConfig.modeReason})`,
     );
