@@ -16,10 +16,18 @@ function detectSource(root, skillDir) {
 }
 
 function extractDescription(markdown) {
-    const lines = markdown
+    const normalizedMarkdown = markdown.replace(/^---[\s\S]*?\n---\s*/m, "");
+    const lines = normalizedMarkdown
         .split(/\r?\n/)
         .map((line) => line.trim())
-        .filter((line) => line.length > 0 && !line.startsWith("#"));
+        .filter((line) =>
+            line.length > 0 &&
+            !line.startsWith("#") &&
+            line !== "---" &&
+            line !== "***" &&
+            !line.startsWith("<!--") &&
+            !line.endsWith("-->")
+        );
 
     return lines[0] ?? "";
 }

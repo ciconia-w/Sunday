@@ -25,6 +25,8 @@ export interface ToolManagementItem {
     description: string;
     /** 是否启用 */
     enabled: boolean;
+    /** 开关是否禁用，仅展示状态不允许直接切换 */
+    toggleDisabled?: boolean;
     /** 是否为内置项 */
     isBuiltIn: boolean;
     /** 是否可编辑 */
@@ -41,6 +43,10 @@ export interface ToolManagementItem {
     toolPreview?: string[];
     /** 工具总数 */
     toolCount?: number;
+    /** 主动作文案 */
+    actionText?: string;
+    /** 主动作是否禁用 */
+    actionDisabled?: boolean;
 }
 
 export type ToolManagementCustomActionResolver<T> = T | ((item: ToolManagementItem) => T);
@@ -109,11 +115,20 @@ export interface CliToolItem {
     description: string;
     enabled: boolean;
     statusText?: string;
+    statusTone?: ToolStatusTone;
+    detailText?: string;
+    actionText?: string;
+    actionDisabled?: boolean;
 }
 
 export function convertSkillToToolItem(skill: SkillRawItem): ToolManagementItem {
     const isBuiltInSkill = skill.source === "builtin";
     const isUosAiSkill = skill.source === "uos-ai";
+    const sourceText = skill.source === "repo"
+        ? "仓库"
+        : skill.source === "local"
+            ? "本地"
+            : undefined;
 
     return {
         id: skill.name,
@@ -123,6 +138,9 @@ export function convertSkillToToolItem(skill: SkillRawItem): ToolManagementItem 
         isBuiltIn: isBuiltInSkill,
         editable: !isBuiltInSkill && !isUosAiSkill, // 第三方 skill 支持在文件管理器中打开目录
         removable: isUosAiSkill, // 仅 uos-ai 来源的技能可删除
+        statusText: sourceText,
+        statusTone: sourceText ? TOOL_STATUS_TONE.NEUTRAL : undefined,
+        detailText: skill.path,
     };
 }
 
@@ -132,9 +150,14 @@ export function convertCliToolToToolItem(tool: CliToolItem): ToolManagementItem 
         name: tool.name,
         description: tool.description,
         enabled: tool.enabled,
+        toggleDisabled: true,
         isBuiltIn: true,
         editable: false,
         removable: false,
         statusText: tool.statusText,
+        statusTone: tool.statusTone,
+        detailText: tool.detailText,
+        actionText: tool.actionText,
+        actionDisabled: tool.actionDisabled,
     };
 }

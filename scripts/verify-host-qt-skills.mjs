@@ -12,6 +12,8 @@ await verifyHostQtWorkspace({
         "MCP",
         "导入技能",
         "管理当前接入 Sunday 的内置技能与本地扩展能力。",
+        "打开安装目录",
+        "tool-management-list-item__detail",
     ],
     verdictConfirmed: "host-qt-skills-confirmed",
     verdictIncomplete: "host-qt-skills-incomplete",

@@ -137,6 +137,31 @@ html.dark {
     margin-top: 8px;
 }
 
+.tool-management-list-item__action-row {
+    margin-top: 8px;
+}
+
+.tool-management-list-item__action-button {
+    display: inline-flex;
+    align-items: center;
+    min-height: 28px;
+    padding: 0 12px;
+    border: 1px solid rgba(0, 129, 255, 0.22);
+    border-radius: 6px;
+    background: rgba(0, 129, 255, 0.08);
+    color: rgba(0, 130, 250, 1);
+    font-size: var(--uosai-font-size-xs);
+    line-height: 28px;
+    cursor: pointer;
+}
+
+.tool-management-list-item__action-button--disabled {
+    border-color: rgba(15, 23, 42, 0.08);
+    background: rgba(15, 23, 42, 0.04);
+    color: rgba(102, 112, 133, 1);
+    cursor: default;
+}
+
 .tool-management-list-item__tool-preview-label {
     flex: 0 0 auto;
     margin-right: 8px;
@@ -215,4 +240,16 @@ html.dark .tool-management-list-item__tool-preview-label {
 html.dark .tool-management-list-item__tool-chip {
     background: rgba(255, 255, 255, 0.08);
     color: rgba(255, 255, 255, 0.86);
+}
+
+html.dark .tool-management-list-item__action-button {
+    border-color: rgba(96, 165, 250, 0.28);
+    background: rgba(59, 130, 246, 0.12);
+    color: rgba(147, 197, 253, 1);
+}
+
+html.dark .tool-management-list-item__action-button--disabled {
+    border-color: rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.04);
+    color: rgba(255, 255, 255, 0.5);
 }

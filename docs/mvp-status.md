@@ -106,6 +106,12 @@ Date: 2026-06-03
   - `refreshMcpRuntime`
   - tool preview
   - runtime detail / startup failure explanation
+- CLI tools 现在已补齐更细的可操作状态面：
+  - PATH 动态发现
+  - 版本和安装路径展示
+  - 登录 / 重新登录 / 安装 / 诊断动作入口
+  - CLI 列表不再把状态开关当成主操作按钮
+- skills inventory 现在会过滤 frontmatter 噪声，展示更干净的描述，并把 source/path 作为可见上下文暴露在列表里
 - `CLI tools` 已具备 sidecar 统一状态模型
 - `browser control` 已具备默认关闭、按需启用、按需注册工具的基础能力
 - Qt host 的 `serviceConfig` 已补齐浏览器 / CLI / MCP 基本 runtime bridge
@@ -123,6 +129,8 @@ Date: 2026-06-03
 - 浏览器面板现在也有独立的 bundle verifier，可在不启动 Qt host 的情况下检查 runtime notice、截图失败引导和结果区动作是否进入产物
 - 浏览器非打扰默认策略现在也有独立的 source verifier，可检查后台窗口模式和真实 probe 的显式开关仍然保留
 - `verify:mcp-api` 现在会真实拉起 stdio MCP 服务并校验 tool preview、错误命令失败态和 disable 后状态，不再只验证 CRUD
+- `verify:cli-tools-api` 现在会验证 CLI detail/action metadata，不再只验证 `statusToken`
+- `verify:skills-api` 现在会拒绝 frontmatter 噪声描述，确保 skills inventory 给到的是可读描述而不是 `---` 或 YAML 字段
 - 浏览器设置页和浏览器面板现在都会直接展示运行时能力状态卡，显式标出“多标签切换 / 整页截图”当前是稳定还是受限
 - `browser panel` 已具备真实交互验证链路：
   - init session

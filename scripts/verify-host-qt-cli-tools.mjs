@@ -16,6 +16,8 @@ await verifyHostQtWorkspace({
         "gh cli",
         "opencli",
         "lark cli",
+        "tool-management-list-item__detail",
+        "tool-management-list-item__action-button",
         "getCliToolsState",
         "statusToken",
     ],
