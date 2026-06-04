@@ -94,6 +94,23 @@ Sunday 当前提供一个 sidecar 级别的外部消息入站协议：
 
 也就是说，同一 `source + channelId + threadId` 的 follow-up 在 sidecar 重启后，仍可继续向同一条飞书 bot webhook 回推。
 
+### Provider-specific adapter: Slack incoming webhook
+
+当前还支持一条非 Lark 的 provider-specific transport：
+
+- `replyTransport = slack-webhook`
+- `replyTransport = slack-incoming-webhook`（兼容别名，内部会归一化为 `slack-webhook`）
+- `replyWebhookUrl = https://hooks.slack.com/services/...`
+
+这条 adapter 会把 Sunday 的 reply 转成 Slack incoming webhook 的最小 `text` payload。
+
+当前保持最小实现：
+
+- 成功时发送 assistant 文本
+- 失败时发送 `Sunday 处理失败：...`
+- 不额外引入 secret / 签名字段
+- 继续复用相同的 route store
+
 ## Reply Webhook Payload
 
 成功回推示例：
@@ -181,6 +198,31 @@ reply queue 会额外保留：
 - 指数退避策略
 - 前端 UI 管理面
 - 平台专属回执确认
+
+## Background Replay
+
+reply queue 现在已经有最小 background replay worker。
+
+默认行为：
+
+- 新的失败 entry 会进入 persisted replay queue
+- worker 会周期扫描 `pending` entry
+- 到达 `nextAttemptAt` 后自动重放
+- 自动重放成功后会把 entry 标成 `delivered`
+- 自动重放超出当前 delay policy 后，会把 entry 标成 `awaiting-operator`
+
+当前相关环境变量：
+
+- `PERSONAL_AGENT_INGRESS_BACKGROUND_REPLAY_ENABLED`
+- `PERSONAL_AGENT_INGRESS_BACKGROUND_REPLAY_DELAYS_MS`
+- `PERSONAL_AGENT_INGRESS_BACKGROUND_REPLAY_POLL_MS`
+
+当前这个 worker 仍然是最小实现：
+
+- 只在 sidecar 进程内运行
+- 没有独立任务队列服务
+- 没有 UI 级 pause / resume / replay history
+- delivery policy 仍是固定 delay，不是指数退避
 
 ## Operator Surface
 
@@ -327,6 +369,20 @@ npm run verify:ingress-lark-api
 - 自定义机器人 `timestamp + sign`
 - 重试后成功投递
 - 多次失败后的 dead-letter 落盘
+
+background replay + Slack verifier：
+
+```bash
+cd <repo-root>
+npm run verify:ingress-background-replay-api
+```
+
+这条 verifier 当前会验证：
+
+- `slack-webhook` provider-specific adapter
+- persisted replay queue
+- sidecar 重启后的 background replay
+- 自动重放成功后的 delivered 状态
 
 operator surface verifier：
 

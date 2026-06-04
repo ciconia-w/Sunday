@@ -131,8 +131,10 @@ Date: 2026-06-03
   - generic webhook reply push
   - webhook route 的 sidecar runtime 持久化与重载
   - `lark-bot-webhook` / `feishu-bot-webhook` provider-specific reply adapter
+  - `slack-webhook` provider-specific reply adapter
   - 最小 reply retry / dead-letter 落盘
   - persisted replay queue
+  - in-process background replay worker
   - sidecar operator API：
     - `get-reply-routes`
     - `get-replay-queue`
@@ -220,8 +222,8 @@ Date: 2026-06-03
    - CLI install / update 路线继续产品化
 4. IM bridge refinement:
    - provider-specific ingress integration
-   - 其他 provider-specific push/reply adapter
-   - 更强的 background replay / operator UI / delivery reliability
+   - 更多 provider-specific push/reply adapter
+   - 更强的 operator UI / delivery reliability
 5. 然后再进入更大的扩展平台方向：
    - extension install / market flows
    - architecture / performance cleanup

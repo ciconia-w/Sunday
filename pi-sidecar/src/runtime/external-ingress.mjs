@@ -53,6 +53,10 @@ function normalizeReplyTransport(value) {
         return "lark-bot-webhook";
     }
 
+    if (normalized === "slack-incoming-webhook") {
+        return "slack-webhook";
+    }
+
     return normalized;
 }
 
@@ -67,7 +71,7 @@ function normalizeReplyTarget(body) {
         return null;
     }
 
-    if (replyTransport && !["webhook", "lark-bot-webhook"].includes(replyTransport)) {
+    if (replyTransport && !["webhook", "lark-bot-webhook", "slack-webhook"].includes(replyTransport)) {
         throw new Error(`Unsupported replyTransport: ${replyTransport}`);
     }
 
@@ -144,15 +148,18 @@ function summarizeReplayQueueEntry(entry) {
         payloadSummary: summarizeReplyPayload(entry.payload),
         attemptCount: normalizeNonNegativeInteger(entry.attemptCount, 0),
         replayCount: normalizeNonNegativeInteger(entry.replayCount, 0),
+        automaticReplayCount: normalizeNonNegativeInteger(entry.automaticReplayCount, 0),
         latestError: entry.latestError ?? "",
         createdAt: entry.createdAt ?? "",
         updatedAt: entry.updatedAt ?? "",
         deliveredAt: entry.deliveredAt ?? "",
         resolvedAt: entry.resolvedAt ?? "",
+        nextAttemptAt: entry.nextAttemptAt ?? "",
+        lastAttemptAt: entry.lastAttemptAt ?? "",
     };
 }
 
-function formatLarkReplyText(payload) {
+function formatPlainTextReply(payload) {
     if (payload?.ok === true) {
         return typeof payload?.assistantText === "string" && payload.assistantText.trim()
             ? payload.assistantText.trim()
@@ -169,6 +176,10 @@ function wait(ms) {
     return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function createFutureIso(ms) {
+    return new Date(Date.now() + Math.max(0, ms)).toISOString();
+}
+
 export class ExternalIngress {
     constructor(options) {
         this.options = options;
@@ -179,11 +190,24 @@ export class ExternalIngress {
             process.env.PERSONAL_AGENT_INGRESS_REPLY_RETRY_DELAYS_MS,
             [1000, 3000],
         );
+        this.backgroundReplayEnabled = String(process.env.PERSONAL_AGENT_INGRESS_BACKGROUND_REPLAY_ENABLED ?? "1") !== "0";
+        this.backgroundReplayDelaysMs = normalizeRetryDelays(
+            process.env.PERSONAL_AGENT_INGRESS_BACKGROUND_REPLAY_DELAYS_MS,
+            [30000, 120000, 300000],
+        );
+        this.backgroundReplayPollMs = normalizeNonNegativeInteger(
+            process.env.PERSONAL_AGENT_INGRESS_BACKGROUND_REPLAY_POLL_MS,
+            5000,
+        );
         this.routeTargets = new Map();
         this.replayQueue = new Map();
         this.sessionQueues = new Map();
         this.activeSessionJobs = new Map();
+        this.processingReplayEntryIds = new Set();
+        this.backgroundReplayLoopRunning = false;
+        this.backgroundReplayTimer = null;
         this.readyPromise = null;
+        this.startBackgroundReplayLoop();
     }
 
     async ensureReady() {
@@ -241,6 +265,22 @@ export class ExternalIngress {
             String(left.createdAt ?? "").localeCompare(String(right.createdAt ?? "")),
         );
         await writeFile(this.replayQueuePath, JSON.stringify({ entries }, null, 2));
+    }
+
+    startBackgroundReplayLoop() {
+        if (!this.backgroundReplayEnabled || this.backgroundReplayTimer) {
+            return;
+        }
+
+        this.backgroundReplayTimer = setInterval(() => {
+            this.runDueBackgroundReplays().catch((error) => {
+                console.error("[external-ingress] background replay loop failed:", error);
+            });
+        }, Math.max(50, this.backgroundReplayPollMs));
+
+        if (typeof this.backgroundReplayTimer.unref === "function") {
+            this.backgroundReplayTimer.unref();
+        }
     }
 
     getStoredReplyTarget(routeKey) {
@@ -342,11 +382,17 @@ export class ExternalIngress {
             total: entries.length,
             pending: entries.filter((entry) => entry.status === "pending").length,
             delivered: entries.filter((entry) => entry.status === "delivered").length,
+            awaitingOperator: entries.filter((entry) => entry.status === "awaiting-operator").length,
             resolved: entries.filter((entry) => entry.status === "resolved").length,
             discarded: entries.filter((entry) => entry.status === "discarded").length,
         };
 
         return {
+            worker: {
+                enabled: this.backgroundReplayEnabled,
+                pollMs: this.backgroundReplayPollMs,
+                delaysMs: [...this.backgroundReplayDelaysMs],
+            },
             counts,
             entries,
         };
@@ -354,6 +400,10 @@ export class ExternalIngress {
 
     async createReplayQueueEntry(replyTarget, payload, errors) {
         const now = new Date().toISOString();
+        const nextAttemptAt =
+            this.backgroundReplayEnabled && this.backgroundReplayDelaysMs.length > 0
+                ? createFutureIso(this.backgroundReplayDelaysMs[0])
+                : "";
         const entry = {
             id: randomUUID(),
             status: "pending",
@@ -366,12 +416,15 @@ export class ExternalIngress {
             payload,
             attemptCount: errors.length,
             replayCount: 0,
+            automaticReplayCount: 0,
             latestError: errors[errors.length - 1]?.error ?? "Reply delivery failed",
             errors,
             createdAt: now,
             updatedAt: now,
             deliveredAt: "",
             resolvedAt: "",
+            nextAttemptAt,
+            lastAttemptAt: "",
         };
 
         this.replayQueue.set(entry.id, entry);
@@ -606,7 +659,7 @@ export class ExternalIngress {
         const body = {
             msg_type: "text",
             content: {
-                text: formatLarkReplyText(payload),
+                text: formatPlainTextReply(payload),
             },
         };
 
@@ -617,6 +670,12 @@ export class ExternalIngress {
         }
 
         return body;
+    }
+
+    buildSlackReplyBody(payload) {
+        return {
+            text: formatPlainTextReply(payload),
+        };
     }
 
     async postGenericWebhookReply(replyTarget, payload) {
@@ -663,6 +722,29 @@ export class ExternalIngress {
         };
     }
 
+    async postSlackWebhookReply(replyTarget, payload) {
+        const body = this.buildSlackReplyBody(payload);
+        const response = await fetch(replyTarget.url, {
+            method: "POST",
+            headers: {
+                "content-type": "application/json; charset=utf-8",
+                ...replyTarget.headers,
+            },
+            body: JSON.stringify(body),
+        });
+
+        if (!response.ok) {
+            throw new Error(`Slack webhook returned HTTP ${response.status}`);
+        }
+
+        return {
+            ok: true,
+            transport: replyTarget.transport,
+            status: response.status,
+            providerPayload: body,
+        };
+    }
+
     async deliverReply(replyTarget, payload) {
         const delivery = await this.executeReplyDelivery(replyTarget, payload);
         if (delivery.ok) {
@@ -699,7 +781,31 @@ export class ExternalIngress {
         };
     }
 
-    async replayQueuedReply(id) {
+    getNextAutomaticReplayDelayMsForIndex(index) {
+        if (!this.backgroundReplayEnabled) {
+            return -1;
+        }
+
+        const normalizedIndex = Math.max(0, index);
+        return normalizedIndex < this.backgroundReplayDelaysMs.length
+            ? this.backgroundReplayDelaysMs[normalizedIndex]
+            : -1;
+    }
+
+    tryBeginReplayProcessing(id) {
+        if (this.processingReplayEntryIds.has(id)) {
+            return false;
+        }
+
+        this.processingReplayEntryIds.add(id);
+        return true;
+    }
+
+    finishReplayProcessing(id) {
+        this.processingReplayEntryIds.delete(id);
+    }
+
+    async replayQueuedReply(id, options = {}) {
         await this.ensureReady();
         const normalizedId = typeof id === "string" ? id.trim() : "";
         if (!normalizedId) {
@@ -715,31 +821,59 @@ export class ExternalIngress {
             throw new Error(`Replay queue entry is already ${entry.status}`);
         }
 
-        const delivery = await this.executeReplyDelivery(entry.replyTarget ?? {}, entry.payload ?? {});
-        const now = new Date().toISOString();
-        entry.attemptCount = normalizeNonNegativeInteger(entry.attemptCount, 0) + delivery.attemptCount;
-        entry.replayCount = normalizeNonNegativeInteger(entry.replayCount, 0) + 1;
-        entry.updatedAt = now;
-
-        if (delivery.ok) {
-            entry.status = "delivered";
-            entry.latestError = "";
-            entry.deliveredAt = now;
-        } else {
-            entry.status = "pending";
-            entry.latestError = delivery.errors[delivery.errors.length - 1]?.error ?? "Reply delivery failed";
-            entry.errors = [...(Array.isArray(entry.errors) ? entry.errors : []), ...delivery.errors];
+        if (!this.tryBeginReplayProcessing(normalizedId)) {
+            throw new Error(`Replay queue entry is already being processed: ${normalizedId}`);
         }
 
-        this.replayQueue.set(entry.id, entry);
-        await this.saveReplayQueue();
+        try {
+            const automatic = options.automatic === true;
+            const delivery = await this.executeReplyDelivery(entry.replyTarget ?? {}, entry.payload ?? {});
+            const now = new Date().toISOString();
+            entry.attemptCount = normalizeNonNegativeInteger(entry.attemptCount, 0) + delivery.attemptCount;
+            entry.updatedAt = now;
+            entry.lastAttemptAt = now;
 
-        return {
-            ok: delivery.ok,
-            attemptCount: delivery.attemptCount,
-            error: delivery.ok ? "" : entry.latestError,
-            entry: summarizeReplayQueueEntry(entry),
-        };
+            if (automatic) {
+                entry.automaticReplayCount = normalizeNonNegativeInteger(entry.automaticReplayCount, 0) + 1;
+            } else {
+                entry.replayCount = normalizeNonNegativeInteger(entry.replayCount, 0) + 1;
+            }
+
+            if (delivery.ok) {
+                entry.status = "delivered";
+                entry.latestError = "";
+                entry.deliveredAt = now;
+                entry.nextAttemptAt = "";
+            } else {
+                entry.latestError = delivery.errors[delivery.errors.length - 1]?.error ?? "Reply delivery failed";
+                entry.errors = [...(Array.isArray(entry.errors) ? entry.errors : []), ...delivery.errors];
+
+                const currentAutomaticReplayCount = normalizeNonNegativeInteger(entry.automaticReplayCount, 0);
+                const nextDelayIndex = automatic ? currentAutomaticReplayCount : currentAutomaticReplayCount;
+                const nextDelayMs = this.getNextAutomaticReplayDelayMsForIndex(nextDelayIndex);
+
+                if (nextDelayMs >= 0) {
+                    entry.status = "pending";
+                    entry.nextAttemptAt = createFutureIso(nextDelayMs);
+                } else {
+                    entry.status = "awaiting-operator";
+                    entry.nextAttemptAt = "";
+                }
+            }
+
+            this.replayQueue.set(entry.id, entry);
+            await this.saveReplayQueue();
+
+            return {
+                ok: delivery.ok,
+                automatic,
+                attemptCount: delivery.attemptCount,
+                error: delivery.ok ? "" : entry.latestError,
+                entry: summarizeReplayQueueEntry(entry),
+            };
+        } finally {
+            this.finishReplayProcessing(normalizedId);
+        }
     }
 
     async resolveReplayQueueEntry(id, resolution) {
@@ -771,6 +905,33 @@ export class ExternalIngress {
         return summarizeReplayQueueEntry(entry);
     }
 
+    async runDueBackgroundReplays() {
+        if (!this.backgroundReplayEnabled || this.backgroundReplayLoopRunning) {
+            return;
+        }
+
+        this.backgroundReplayLoopRunning = true;
+        try {
+            await this.ensureReady();
+            const now = Date.now();
+            const dueEntries = [...this.replayQueue.values()]
+                .filter((entry) => String(entry.status ?? "") === "pending")
+                .filter((entry) => typeof entry.nextAttemptAt === "string" && entry.nextAttemptAt.trim())
+                .filter((entry) => Date.parse(entry.nextAttemptAt) <= now)
+                .sort((left, right) => String(left.nextAttemptAt ?? "").localeCompare(String(right.nextAttemptAt ?? "")));
+
+            for (const entry of dueEntries) {
+                try {
+                    await this.replayQueuedReply(entry.id, { automatic: true });
+                } catch (error) {
+                    console.error("[external-ingress] background replay failed:", error);
+                }
+            }
+        } finally {
+            this.backgroundReplayLoopRunning = false;
+        }
+    }
+
     async postReply(replyTarget, payload) {
         if (replyTarget.transport === "webhook") {
             return this.postGenericWebhookReply(replyTarget, payload);
@@ -778,6 +939,10 @@ export class ExternalIngress {
 
         if (replyTarget.transport === "lark-bot-webhook") {
             return this.postLarkBotWebhookReply(replyTarget, payload);
+        }
+
+        if (replyTarget.transport === "slack-webhook") {
+            return this.postSlackWebhookReply(replyTarget, payload);
         }
 
         throw new Error(`Unsupported reply transport: ${replyTarget.transport}`);

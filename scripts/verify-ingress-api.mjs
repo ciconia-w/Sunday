@@ -226,6 +226,7 @@ try {
                 sidecarPort: 8787,
                 env: {
                     PERSONAL_AGENT_RUNTIME_DIR: runtimeDir,
+                    PERSONAL_AGENT_INGRESS_BACKGROUND_REPLAY_ENABLED: "0",
                 },
             },
             async ({ sidecarPort }) => {
@@ -281,6 +282,7 @@ try {
                 sidecarPort: 8787,
                 env: {
                     PERSONAL_AGENT_RUNTIME_DIR: runtimeDir,
+                    PERSONAL_AGENT_INGRESS_BACKGROUND_REPLAY_ENABLED: "0",
                 },
             },
             async ({ sidecarPort }) => {
