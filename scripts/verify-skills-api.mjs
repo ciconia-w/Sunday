@@ -92,6 +92,7 @@ try {
             let githubImportResult = null;
             let githubImportedHasResult = null;
             let removeGithubImportedResult = null;
+            let sourceOfTruthResult = null;
             let reloadedSkillsData = null;
             let removeMissingResult = null;
 
@@ -129,6 +130,8 @@ try {
             removeGithubImportedResult = await post(baseUrl, "/skills/remove", {
                 skillName: "sample-github-skill",
             });
+
+            sourceOfTruthResult = await post(baseUrl, "/skills/source-of-truth", {});
 
             reloadedSkillsData = await post(baseUrl, "/skills/data", {});
             removeMissingResult = await post(baseUrl, "/skills/remove", {
@@ -168,6 +171,10 @@ try {
                 githubImportedHasResult?.result === true &&
                 removeGithubImportedResult?.ok === true &&
                 removeGithubImportedResult?.result === true &&
+                sourceOfTruthResult?.ok === true &&
+                sourceOfTruthResult?.result?.managedRootDir === managedSkillsRoot &&
+                typeof sourceOfTruthResult?.result?.sourceDocPath === "string" &&
+                sourceOfTruthResult.result.sourceDocPath.endsWith("/docs/skills-source-of-truth.md") &&
                 reloadedSkillsData?.ok === true &&
                 importedSkillStillPresent === false &&
                 removeMissingResult?.ok === true &&
@@ -190,6 +197,7 @@ try {
                         githubImportResult,
                         githubImportedHasResult,
                         removeGithubImportedResult,
+                        sourceOfTruthResult,
                         removeMissingResult,
                         importedSkillStillPresent,
                         verdict,

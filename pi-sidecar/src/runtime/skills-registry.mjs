@@ -125,6 +125,7 @@ export class SkillsRegistry {
             ?? this.roots.find((root) => root.source === "auto")?.dir
             ?? this.roots[0]?.dir
             ?? join(homedir(), ".codex", "skills");
+        this.sourceDocPath = options.sourceDocPath ?? "";
         this.skills = [];
         this.enabledByName = new Map();
     }
@@ -193,6 +194,15 @@ export class SkillsRegistry {
 
     hasSkill(skillName) {
         return this.skills.some((item) => item.name === skillName);
+    }
+
+    getSourceOfTruth() {
+        return {
+            managedRootDir: this.managedRootDir,
+            builtinRootDir: join(this.managedRootDir, ".system"),
+            repoSkillsDir: this.roots.find((root) => root.source === "repo")?.dir ?? "",
+            sourceDocPath: this.sourceDocPath,
+        };
     }
 
     async importSkill(sourcePath) {

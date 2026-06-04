@@ -1,5 +1,6 @@
 import { AssistantID, type Assistant } from "./types/assistant";
 import { ModelAbility, type Model } from "./types/model";
+import type { McpService } from "./types/mcp-service";
 import { DemoApprovalBroker } from "./dev-approval-broker";
 
 type Listener<TArgs extends unknown[]> = (...args: TArgs) => void;
@@ -104,6 +105,11 @@ const models: Model[] = [
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+type MockMcpServerConfig = {
+    command?: unknown;
+    url?: unknown;
+};
+
 export function ensureDevInjectedChannels() {
     if (window.__UOS_PI_CHANNELS__) {
         return;
@@ -174,7 +180,7 @@ export function ensureDevInjectedChannels() {
         "edit_file",
         "list_directory",
     ];
-    let mcpServices = [
+    let mcpServices: McpService[] = [
         {
             id: "filesystem",
             name: "Filesystem",
@@ -197,7 +203,7 @@ export function ensureDevInjectedChannels() {
         return JSON.parse(JSON.stringify(value));
     }
 
-    function parseMcpServiceDraft(jsonConfig: string, description: string) {
+    function parseMcpServiceDraft(jsonConfig: string, description: string): McpService {
         const parsed = JSON.parse(jsonConfig);
         const servers = parsed?.mcpServers;
 
@@ -212,6 +218,9 @@ export function ensureDevInjectedChannels() {
 
         const [serviceId, serviceConfig] = entries[0];
         const normalizedId = serviceId.trim();
+        const typedConfig = (serviceConfig && typeof serviceConfig === "object"
+            ? serviceConfig
+            : {}) as MockMcpServerConfig;
 
         if (!normalizedId) {
             throw new Error("MCP 服务 ID 不能为空。");
@@ -219,8 +228,8 @@ export function ensureDevInjectedChannels() {
 
         const normalizedConfig = JSON.stringify(parsed, null, 2);
         const inferredDescription =
-            typeof serviceConfig?.command === "string" && serviceConfig.command.trim()
-                ? `Command: ${serviceConfig.command.trim()}`
+            typeof typedConfig.command === "string" && typedConfig.command.trim()
+                ? `Command: ${typedConfig.command.trim()}`
                 : "Custom MCP service configuration.";
 
         return {
@@ -236,7 +245,7 @@ export function ensureDevInjectedChannels() {
         };
     }
 
-    function getMockMcpRuntimeShape(service: Record<string, unknown>) {
+    function getMockMcpRuntimeShape(service: McpService) {
         if (service.isBuiltIn === true) {
             const enabled = service.enabled !== false;
             return {
@@ -267,7 +276,9 @@ export function ensureDevInjectedChannels() {
             const entries = servers && typeof servers === "object" && !Array.isArray(servers)
                 ? Object.entries(servers)
                 : [];
-            const serviceConfig = entries[0]?.[1];
+            const serviceConfig = (entries[0]?.[1] && typeof entries[0][1] === "object"
+                ? entries[0][1]
+                : {}) as MockMcpServerConfig;
 
             if (typeof serviceConfig?.command === "string" && serviceConfig.command.trim()) {
                 const command = serviceConfig.command.trim();
@@ -775,6 +786,12 @@ export function ensureDevInjectedChannels() {
             reloadSkills: callbackify(async () => undefined),
             setSkillEnabled: callbackify(async () => true),
             hasSkill: callbackify(async () => false),
+            getSkillsSourceOfTruth: callbackify(async () => ({
+                managedRootDir: "/home/demo/.codex/skills",
+                builtinRootDir: "/home/demo/.codex/skills/.system",
+                repoSkillsDir: "/workspace/project/skills",
+                sourceDocPath: "/workspace/project/docs/skills-source-of-truth.md",
+            })),
             addSkillForWeb: callbackify(async () => ({
                 success: false,
                 error: "当前模式不支持导入技能，请在桌面宿主中操作。",

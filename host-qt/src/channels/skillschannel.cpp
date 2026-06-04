@@ -61,6 +61,15 @@ bool SkillsChannel::hasSkill(const QString &skillName) const
         .toBool();
 }
 
+QJsonObject SkillsChannel::getSkillsSourceOfTruth() const
+{
+    if (!m_sidecarClient) {
+        return QJsonObject();
+    }
+
+    return m_sidecarClient->postJsonValueSync(QStringLiteral("/skills/source-of-truth"), QVariantMap()).toObject();
+}
+
 QJsonObject SkillsChannel::addSkillForWeb() const
 {
     QJsonObject root;

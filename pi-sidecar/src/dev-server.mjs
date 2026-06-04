@@ -129,6 +129,7 @@ const skillsRegistry = new SkillsRegistry({
         { dir: repoSkillsDir, source: "repo" },
     ],
     managedRootDir: userSkillsDir,
+    sourceDocPath: resolve(workspaceDir, "docs", "skills-source-of-truth.md"),
 });
 const mcpRegistry = new McpRegistry({ runtimeDir });
 const externalIngress = new ExternalIngress({
@@ -702,6 +703,8 @@ const server = createServer(async (_req, res) => {
                     result = skillsRegistry.setSkillEnabled(body.skillName ?? "", body.enabled === true);
                 } else if (_req.url === "/skills/has") {
                     result = skillsRegistry.hasSkill(body.skillName ?? "");
+                } else if (_req.url === "/skills/source-of-truth") {
+                    result = skillsRegistry.getSourceOfTruth();
                 } else if (_req.url === "/skills/import-local") {
                     result = await skillsRegistry.importSkill(body.sourcePath ?? "");
                 } else if (_req.url === "/skills/import-github") {
