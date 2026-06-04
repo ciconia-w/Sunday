@@ -30,6 +30,16 @@ interface IngressReplayPayloadSummary {
     errorPreview?: string;
 }
 
+interface IngressReplayHistoryEvent {
+    kind: string;
+    mode: string;
+    at: string;
+    attemptCount: number;
+    totalAttemptCount: number;
+    status: string;
+    error: string;
+}
+
 interface IngressReplayQueueEntry {
     id: string;
     status: string;
@@ -50,6 +60,7 @@ interface IngressReplayQueueEntry {
     resolvedAt: string;
     nextAttemptAt: string;
     lastAttemptAt: string;
+    history: IngressReplayHistoryEvent[];
 }
 
 interface IngressReplayQueueState {
@@ -219,6 +230,56 @@ function normalizeTransportLabel(transport: string) {
     return transport || "unknown";
 }
 
+function formatReplayHistoryTitle(event: IngressReplayHistoryEvent) {
+    if (event.kind === "delivery-failed") {
+        return "初始回推失败";
+    }
+
+    if (event.kind === "replay-succeeded") {
+        return event.mode === "automatic" ? "自动重放成功" : "手动重试成功";
+    }
+
+    if (event.kind === "replay-failed") {
+        return event.mode === "automatic" ? "自动重放失败" : "手动重试失败";
+    }
+
+    if (event.kind === "resolved") {
+        return "已标记为已处理";
+    }
+
+    if (event.kind === "discarded") {
+        return "已标记为忽略";
+    }
+
+    if (event.kind === "delivered") {
+        return "已成功送达";
+    }
+
+    return "历史记录";
+}
+
+function formatReplayHistoryDetail(event: IngressReplayHistoryEvent) {
+    const fragments: string[] = [];
+
+    if (event.attemptCount > 0) {
+        fragments.push(`本次 ${event.attemptCount} 次尝试`);
+    }
+
+    if (event.totalAttemptCount > 0) {
+        fragments.push(`累计 ${event.totalAttemptCount} 次`);
+    }
+
+    if (event.status) {
+        fragments.push(`状态 ${event.status}`);
+    }
+
+    if (event.error) {
+        fragments.push(event.error);
+    }
+
+    return fragments.join(" / ");
+}
+
 export default defineComponent({
     name: "IngressOperatorPage",
     components: {
@@ -259,7 +320,12 @@ export default defineComponent({
                             ...createDefaultOperatorState().replayQueue.counts,
                             ...(state?.replayQueue?.counts || {}),
                         },
-                        entries: Array.isArray(state?.replayQueue?.entries) ? state.replayQueue.entries : [],
+                        entries: Array.isArray(state?.replayQueue?.entries)
+                            ? state.replayQueue.entries.map((entry) => ({
+                                ...entry,
+                                history: Array.isArray(entry?.history) ? entry.history : [],
+                            }))
+                            : [],
                     },
                     backgroundReplay: {
                         ...createDefaultOperatorState().backgroundReplay,
@@ -542,6 +608,8 @@ export default defineComponent({
             formatTimeLabel,
             formatDelayList,
             normalizeTransportLabel,
+            formatReplayHistoryTitle,
+            formatReplayHistoryDetail,
             deliveryStrategyText,
             loadOperatorState,
             handlePauseBackgroundReplay,
@@ -763,6 +831,32 @@ export default defineComponent({
                                                             <div>Updated: {this.formatTimeLabel(entry.updatedAt) || "-"}</div>
                                                             {entry.latestError ? <div>Latest Error: {entry.latestError}</div> : null}
                                                         </div>
+                                                        {entry.history.length > 0 && (
+                                                            <div class="ingress-operator-page__history" data-ingress-replay-history>
+                                                                <div class="ingress-operator-page__history-title">Replay History</div>
+                                                                <div class="ingress-operator-page__history-list">
+                                                                    {[...entry.history].reverse().map((historyEvent, index) => (
+                                                                        <div
+                                                                            class="ingress-operator-page__history-item"
+                                                                            key={`${entry.id}-${historyEvent.at}-${historyEvent.kind}-${index}`}
+                                                                            data-ingress-replay-history-item
+                                                                        >
+                                                                            <div class="ingress-operator-page__history-topline">
+                                                                                <span class="ingress-operator-page__history-label">
+                                                                                    {this.formatReplayHistoryTitle(historyEvent)}
+                                                                                </span>
+                                                                                <span class="ingress-operator-page__history-time">
+                                                                                    {this.formatTimeLabel(historyEvent.at) || "-"}
+                                                                                </span>
+                                                                            </div>
+                                                                            <div class="ingress-operator-page__history-detail">
+                                                                                {this.formatReplayHistoryDetail(historyEvent) || "-"}
+                                                                            </div>
+                                                                        </div>
+                                                                    ))}
+                                                                </div>
+                                                            </div>
+                                                        )}
                                                         {(this.canReplayEntry(entry) || this.canResolveEntry(entry)) && (
                                                             <div class="ingress-operator-page__row-actions">
                                                                 {this.canReplayEntry(entry) && (

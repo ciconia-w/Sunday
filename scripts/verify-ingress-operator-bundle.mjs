@@ -14,10 +14,13 @@ const markers = [
     "Delivery Policy",
     "Reply Routes",
     "Replay Queue",
+    "Replay History",
     "显示已处理",
     "立即重试",
     "标记已处理",
     "忽略",
+    "初始回推失败",
+    "手动重试成功",
     "暂停自动重放",
     "恢复自动重放",
     "自动重放已暂停",
@@ -40,6 +43,8 @@ const markers = [
     "data-ingress-operator-pause-action",
     "data-ingress-operator-resume-action",
     "data-ingress-operator-paused-at",
+    "data-ingress-replay-history",
+    "data-ingress-replay-history-item",
 ];
 
 const present = Object.fromEntries(markers.map((marker) => [marker, bundle.includes(marker)]));

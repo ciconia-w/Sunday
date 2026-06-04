@@ -180,6 +180,52 @@ html.dark .ingress-operator-page__list-row {
     gap: 10px;
 }
 
+.ingress-operator-page__history {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    background: rgba(0, 0, 0, 0.03);
+}
+
+.ingress-operator-page__history-title,
+.ingress-operator-page__history-label,
+.ingress-operator-page__history-time,
+.ingress-operator-page__history-detail {
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+.ingress-operator-page__history-title,
+.ingress-operator-page__history-label {
+    color: var(--skills-page-title-color);
+    font-weight: 600;
+}
+
+.ingress-operator-page__history-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.ingress-operator-page__history-item {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.ingress-operator-page__history-topline {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.ingress-operator-page__history-time,
+.ingress-operator-page__history-detail {
+    color: var(--uosai-color-text-secondary);
+}
+
 .ingress-operator-page__badge {
     display: inline-flex;
     align-items: center;
@@ -219,4 +265,8 @@ html.dark .ingress-operator-page__note {
 
 html.dark .ingress-operator-page__badge--neutral {
     background: rgba(255, 255, 255, 0.08);
+}
+
+html.dark .ingress-operator-page__history {
+    background: rgba(255, 255, 255, 0.04);
 }

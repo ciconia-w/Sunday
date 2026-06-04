@@ -227,6 +227,7 @@ reply queue 会额外保留：
 - 待重放 payload
 - 累计 attempt / replay 次数
 - delivered / resolved 等状态
+- 每条 queue entry 的 replay history（初始失败 / 自动或手动重试 / resolve）
 
 当前还没有：
 
@@ -297,7 +298,7 @@ background replay 当前支持两类 delivery policy：
 
 当前这个 dedicated replay service 仍然是最小实现：
 
-- replay history 仍未单独产品化
+- replay history 已进入 operator state 和前端 UI，但还没有单独的导出/检索面
 - queue / route 的真实所有权仍保留在 sidecar，不是完全自持久化的独立服务
 
 ## Operator Surface
@@ -337,6 +338,7 @@ background replay 当前支持两类 delivery policy：
 
 - 查看 reply routes
 - 查看 replay queue
+- 查看单条 queue entry 的 replay history timeline
 - 查看当前 delivery policy / background replay 模式
 - 对单条失败 delivery 执行 `立即重试 / 标记已处理 / 忽略`
 
