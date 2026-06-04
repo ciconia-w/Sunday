@@ -142,6 +142,7 @@ npm run verify:model-config-api
 - [MVP Status](./docs/mvp-status.md)
 - [MVP Demo](./docs/mvp-demo.md)
 - [Extension Surfaces](./docs/extension-surfaces.md)
+- [External Ingress](./docs/external-ingress.md)
 - [Host Contract](./docs/host-contract.md)
 - [Phase 2 Verification](./docs/verification-20260526-phase2.md)
 

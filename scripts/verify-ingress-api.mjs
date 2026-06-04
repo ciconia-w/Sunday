@@ -1,5 +1,9 @@
-async function post(path, body) {
-    const response = await fetch(`http://127.0.0.1:8787${path}`, {
+import { withSidecarRuntime } from "./sidecar-verify-runtime.mjs";
+
+const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function post(baseUrl, path, body) {
+    const response = await fetch(`${baseUrl}${path}`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(body ?? {}),
@@ -7,88 +11,209 @@ async function post(path, body) {
     return response.json();
 }
 
-const externalMessageId = `ext-msg-${Date.now()}`;
-const channelId = `demo-channel-${Date.now()}`;
+function extractCombinedText(events) {
+    return events
+        .filter((evt) => evt.event === 4)
+        .map((evt) => {
+            try {
+                return JSON.parse(evt.message);
+            } catch {
+                return null;
+            }
+        })
+        .filter(Boolean)
+        .filter((message) => message.type === "text")
+        .map((message) => message.data?.content ?? "")
+        .join("");
+}
 
-const eventResponse = await fetch("http://127.0.0.1:8787/events");
-const reader = eventResponse.body.getReader();
-const decoder = new TextDecoder();
-let buffer = "";
-let done = false;
-const events = [];
+async function waitForSessionFinish(events, sessionId, expectedFinishCount, timeoutMs = 45000) {
+    const deadline = Date.now() + timeoutMs;
 
-const expectedConversationId = `ext-conv-im-demo-${channelId}`;
+    while (Date.now() < deadline) {
+        const sessionEvents = events.filter((evt) => evt.sessionId === sessionId);
+        const finishCount = sessionEvents.filter((evt) => evt.event === 2).length;
+        const errorEvent = sessionEvents.find((evt) => evt.event === 3);
 
-const readLoop = (async () => {
-    while (!done) {
-        const { value, done: streamDone } = await reader.read();
-        if (streamDone) break;
-        buffer += decoder.decode(value, { stream: true });
-        let idx;
-        while ((idx = buffer.indexOf("\n\n")) >= 0) {
-            const chunk = buffer.slice(0, idx);
-            buffer = buffer.slice(idx + 2);
-            const dataLine = chunk.split("\n").find((line) => line.startsWith("data: "));
-            if (!dataLine) continue;
-            const evt = JSON.parse(dataLine.slice(6));
-            if (evt.sessionId !== `ext-sess-${externalMessageId}`) continue;
-            events.push(evt);
-            if (evt.event === 2 || evt.event === 3) {
-                done = true;
+        if (errorEvent) {
+            return {
+                ok: false,
+                reason: "session-error",
+                sessionEvents,
+            };
+        }
+
+        if (finishCount >= expectedFinishCount) {
+            return {
+                ok: true,
+                sessionEvents,
+            };
+        }
+
+        await wait(250);
+    }
+
+    return {
+        ok: false,
+        reason: "timeout",
+        sessionEvents: events.filter((evt) => evt.sessionId === sessionId),
+    };
+}
+
+async function waitForConversation(baseUrl, conversationId, predicate, timeoutMs = 15000) {
+    const deadline = Date.now() + timeoutMs;
+    let latest = null;
+
+    while (Date.now() < deadline) {
+        latest = await post(baseUrl, "/conversation/get", { id: conversationId });
+        if (predicate(latest?.result)) {
+            return latest?.result ?? null;
+        }
+        await wait(250);
+    }
+
+    return latest?.result ?? null;
+}
+
+const now = Date.now();
+const source = "im-demo";
+const channelId = `demo-channel-${now}`;
+const threadId = `thread-${now}`;
+const firstExternalMessageId = `ext-msg-${now}`;
+const secondExternalMessageId = `ext-msg-followup-${now}`;
+
+await withSidecarRuntime({ sidecarPort: 8787 }, async ({ sidecarPort }) => {
+    const baseUrl = `http://127.0.0.1:${sidecarPort}`;
+    const watchedSessionIds = new Set();
+    const events = [];
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let stopReading = false;
+
+    const eventResponse = await fetch(`${baseUrl}/events`);
+    const reader = eventResponse.body.getReader();
+    const readLoop = (async () => {
+        while (!stopReading) {
+            const { value, done } = await reader.read();
+            if (done) {
                 break;
             }
+
+            buffer += decoder.decode(value, { stream: true });
+            let chunkEndIndex = -1;
+            while ((chunkEndIndex = buffer.indexOf("\n\n")) >= 0) {
+                const chunk = buffer.slice(0, chunkEndIndex);
+                buffer = buffer.slice(chunkEndIndex + 2);
+                const dataLine = chunk.split("\n").find((line) => line.startsWith("data: "));
+                if (!dataLine) {
+                    continue;
+                }
+
+                const parsed = JSON.parse(dataLine.slice(6));
+                if (watchedSessionIds.size > 0 && !watchedSessionIds.has(parsed.sessionId)) {
+                    continue;
+                }
+
+                events.push(parsed);
+            }
         }
+    })();
+
+    try {
+        const ingressResult = await post(baseUrl, "/ingress/message", {
+            source,
+            channelId,
+            threadId,
+            userId: "demo-user",
+            assistantId: "uos-ai-generic",
+            text: "Reply with exactly: ingress-ok",
+            externalMessageId: firstExternalMessageId,
+        });
+
+        watchedSessionIds.add(ingressResult.sessionId);
+
+        const firstCycle = await waitForSessionFinish(events, ingressResult.sessionId, 1);
+        const firstCycleText = extractCombinedText(firstCycle.sessionEvents);
+
+        const conversationAfterFirstReply = await waitForConversation(
+            baseUrl,
+            ingressResult.conversationId,
+            (conversation) => Object.values(conversation?.messages ?? {}).some((message) => message?.role === 2),
+        );
+
+        const firstAssistantEntry = Object.entries(conversationAfterFirstReply?.messages ?? {})
+            .find(([, message]) => message?.role === 2) ?? [];
+        const firstAssistantMessageId = firstAssistantEntry[0] ?? "";
+
+        const followupResult = await post(baseUrl, "/ingress/message", {
+            source,
+            channelId,
+            threadId,
+            userId: "demo-user",
+            assistantId: "uos-ai-generic",
+            text: "Reply with exactly: ingress-followup-ok",
+            externalMessageId: secondExternalMessageId,
+        });
+
+        const secondCycle = await waitForSessionFinish(events, ingressResult.sessionId, 2);
+        const secondCycleEvents = secondCycle.sessionEvents.slice(firstCycle.sessionEvents.length);
+        const secondCycleText = extractCombinedText(secondCycleEvents);
+
+        const conversationAfterFollowup = await waitForConversation(
+            baseUrl,
+            ingressResult.conversationId,
+            (conversation) =>
+                Boolean(conversation?.messages?.[secondExternalMessageId])
+                && Object.values(conversation?.messages ?? {}).filter((message) => message?.role === 2).length >= 2,
+        );
+        const indexes = await post(baseUrl, "/conversation/indexes", {});
+
+        const assistantMessages = Object.entries(conversationAfterFollowup?.messages ?? {})
+            .filter(([, message]) => message?.role === 2);
+        const secondUserMessage = conversationAfterFollowup?.messages?.[secondExternalMessageId] ?? null;
+
+        const verdict =
+            ingressResult?.ok === true &&
+            ingressResult?.threadId === threadId &&
+            typeof ingressResult?.routeKey === "string" &&
+            ingressResult?.sessionId === followupResult?.sessionId &&
+            ingressResult?.conversationId === followupResult?.conversationId &&
+            followupResult?.previousMessageId === firstAssistantMessageId &&
+            firstCycle.ok === true &&
+            secondCycle.ok === true &&
+            /ingress-ok/i.test(firstCycleText) &&
+            /ingress-followup-ok/i.test(secondCycleText) &&
+            assistantMessages.length >= 2 &&
+            secondUserMessage?.previous === firstAssistantMessageId &&
+            (indexes?.result ?? []).some((item) => item.id === ingressResult.conversationId)
+                ? "ingress-api-confirmed"
+                : "ingress-api-incomplete";
+
+        console.log(
+            JSON.stringify(
+                {
+                    sidecarPort,
+                    ingressResult,
+                    followupResult,
+                    firstAssistantMessageId,
+                    firstCycle,
+                    firstCycleText,
+                    secondCycle,
+                    secondCycleText,
+                    assistantMessageCount: assistantMessages.length,
+                    conversationAfterFollowup,
+                    indexHit: (indexes?.result ?? []).find((item) => item.id === ingressResult.conversationId) ?? null,
+                    verdict,
+                },
+                null,
+                2,
+            ),
+        );
+
+        process.exit(verdict === "ingress-api-confirmed" ? 0 : 1);
+    } finally {
+        stopReading = true;
+        await reader.cancel().catch(() => undefined);
+        await readLoop.catch(() => undefined);
     }
-})();
-
-const ingressResult = await post("/ingress/message", {
-    source: "im-demo",
-    channelId,
-    userId: "demo-user",
-    assistantId: "uos-ai-generic",
-    text: "Reply with exactly: ingress-ok",
-    externalMessageId,
 });
-
-const deadline = Date.now() + 45000;
-while (!done && Date.now() < deadline) {
-    await new Promise((resolve) => setTimeout(resolve, 250));
-}
-await reader.cancel();
-await readLoop;
-
-const textParts = events
-    .filter((evt) => evt.event === 4)
-    .map((evt) => {
-        try {
-            return JSON.parse(evt.message);
-        } catch {
-            return null;
-        }
-    })
-    .filter(Boolean)
-    .filter((msg) => msg.type === "text")
-    .map((msg) => msg.data?.content ?? "");
-
-const combinedText = textParts.join("");
-
-const verdict =
-    ingressResult?.ok === true &&
-    ingressResult.conversationId === expectedConversationId &&
-    events.some((evt) => evt.event === 2) &&
-    /ingress-ok/i.test(combinedText)
-        ? "ingress-api-confirmed"
-        : "ingress-api-incomplete";
-
-console.log(
-    JSON.stringify(
-        {
-            ingressResult,
-            combinedText,
-            eventCount: events.length,
-            verdict,
-        },
-        null,
-        2,
-    ),
-);

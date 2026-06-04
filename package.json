@@ -44,6 +44,7 @@
     "verify:skills-api": "node ./scripts/verify-skills-api.mjs",
     "verify:skills-import-source": "node ./scripts/verify-skills-import-source.mjs",
     "verify:ingress-api": "node ./scripts/verify-ingress-api.mjs",
+    "verify:ingress-source": "node ./scripts/verify-ingress-source.mjs",
     "verify:system-channel": "bash ./scripts/verify-system-channel.sh",
     "verify:file-channel": "bash ./scripts/verify-file-channel.sh",
     "verify:mvp": "node ./scripts/verify-mvp.mjs",
