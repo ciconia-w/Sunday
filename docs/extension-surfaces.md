@@ -122,15 +122,17 @@ Current state:
 - default routing is stable by `source + channelId + threadId`
 - follow-up messages can auto-link to the current conversation tail even without a frontend participant
 - headless ingress replies can now be persisted back into conversation history after session completion
+- generic webhook reply push is now available above the ingress contract and can be reused across sidecar restarts
 
 Current gaps:
 
-- reply push / transport adapters are still missing
 - platform-specific bridge logic still needs to be layered on top of the generic ingress contract
+- retry queue / dead-letter / signature strategy for reply delivery are still missing
 
 Recommended next step:
 
 - keep `/ingress/message` as the canonical sidecar ingress contract
+- keep generic webhook reply push as the first reusable transport adapter
 - add provider-specific push/reply adapters above it
 - use `taskObj` only if host-level delivery is required
 
