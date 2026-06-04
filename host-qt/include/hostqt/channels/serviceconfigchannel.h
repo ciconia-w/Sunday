@@ -39,6 +39,8 @@ public slots:
     QJsonObject browserCaptureScreenshot(const QString &outputPath) const;
     QJsonObject getIngressOperatorState(bool includeResolved = false) const;
     QJsonObject replayIngressQueueEntry(const QString &id) const;
+    QJsonObject pauseIngressBackgroundReplay(const QString &reason = QString()) const;
+    QJsonObject resumeIngressBackgroundReplay() const;
     QJsonObject resolveIngressQueueEntry(const QString &id, const QString &resolution) const;
     QJsonObject getModelConfig() const;
     QJsonObject saveModelConfig(

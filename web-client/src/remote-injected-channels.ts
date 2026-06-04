@@ -564,6 +564,9 @@ export async function createRemoteInjectedChannels(baseUrl = "") {
                             enabled: false,
                             pollMs: 5000,
                             delaysMs: [],
+                            paused: false,
+                            pauseReason: "",
+                            pausedAt: "",
                         },
                         counts: {
                             total: 0,
@@ -606,6 +609,12 @@ export async function createRemoteInjectedChannels(baseUrl = "") {
                             manager: "none",
                             managedBySidecar: false,
                         },
+                        control: {
+                            paused: false,
+                            pauseReason: "",
+                            pausedAt: "",
+                            updatedAt: "",
+                        },
                     },
                     runtimeNote: "service-config unavailable",
                 }),
@@ -613,6 +622,24 @@ export async function createRemoteInjectedChannels(baseUrl = "") {
             replayIngressQueueEntry: callbackify(async (id: string) =>
                 postServiceConfig("/service-config/replay-ingress-queue-entry", { id }, {
                     ok: false,
+                    error: "service-config unavailable",
+                }),
+            ),
+            pauseIngressBackgroundReplay: callbackify(async (reason: string) =>
+                postServiceConfig("/service-config/pause-ingress-background-replay", { reason }, {
+                    paused: false,
+                    pauseReason: "",
+                    pausedAt: "",
+                    updatedAt: "",
+                    error: "service-config unavailable",
+                }),
+            ),
+            resumeIngressBackgroundReplay: callbackify(async () =>
+                postServiceConfig("/service-config/resume-ingress-background-replay", {}, {
+                    paused: false,
+                    pauseReason: "",
+                    pausedAt: "",
+                    updatedAt: "",
                     error: "service-config unavailable",
                 }),
             ),

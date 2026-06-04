@@ -81,6 +81,9 @@ QJsonObject defaultIngressOperatorState()
         {QStringLiteral("enabled"), false},
         {QStringLiteral("pollMs"), 5000},
         {QStringLiteral("delaysMs"), QJsonArray()},
+        {QStringLiteral("paused"), false},
+        {QStringLiteral("pauseReason"), QString()},
+        {QStringLiteral("pausedAt"), QString()},
     };
     QJsonObject replayQueue{
         {QStringLiteral("worker"), replayWorker},
@@ -112,6 +115,12 @@ QJsonObject defaultIngressOperatorState()
             {QStringLiteral("lastError"), QString()},
             {QStringLiteral("manager"), QStringLiteral("none")},
             {QStringLiteral("managedBySidecar"), false},
+        }},
+        {QStringLiteral("control"), QJsonObject{
+            {QStringLiteral("paused"), false},
+            {QStringLiteral("pauseReason"), QString()},
+            {QStringLiteral("pausedAt"), QString()},
+            {QStringLiteral("updatedAt"), QString()},
         }},
     };
     QJsonObject replyRetryPolicy{
@@ -388,6 +397,40 @@ QJsonObject ServiceConfigChannel::replayIngressQueueEntry(const QString &id) con
     const QJsonValue result = m_sidecarClient->postJsonValueSync(
         QStringLiteral("/service-config/replay-ingress-queue-entry"),
         QVariantMap{{QStringLiteral("id"), id}},
+        &errorMessage);
+    if (!errorMessage.isEmpty()) {
+        return defaultIngressOperatorActionResult(errorMessage);
+    }
+
+    return result.toObject();
+}
+QJsonObject ServiceConfigChannel::pauseIngressBackgroundReplay(const QString &reason) const
+{
+    if (!m_sidecarClient) {
+        return defaultIngressOperatorActionResult();
+    }
+
+    QString errorMessage;
+    const QJsonValue result = m_sidecarClient->postJsonValueSync(
+        QStringLiteral("/service-config/pause-ingress-background-replay"),
+        QVariantMap{{QStringLiteral("reason"), reason}},
+        &errorMessage);
+    if (!errorMessage.isEmpty()) {
+        return defaultIngressOperatorActionResult(errorMessage);
+    }
+
+    return result.toObject();
+}
+QJsonObject ServiceConfigChannel::resumeIngressBackgroundReplay() const
+{
+    if (!m_sidecarClient) {
+        return defaultIngressOperatorActionResult();
+    }
+
+    QString errorMessage;
+    const QJsonValue result = m_sidecarClient->postJsonValueSync(
+        QStringLiteral("/service-config/resume-ingress-background-replay"),
+        QVariantMap(),
         &errorMessage);
     if (!errorMessage.isEmpty()) {
         return defaultIngressOperatorActionResult(errorMessage);

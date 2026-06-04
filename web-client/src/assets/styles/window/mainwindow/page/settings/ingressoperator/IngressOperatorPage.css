@@ -68,6 +68,14 @@
     gap: 8px 12px;
 }
 
+.ingress-operator-page__panel-header-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+}
+
 .ingress-operator-page__panel-title,
 .ingress-operator-page__row-title,
 .ingress-operator-page__fact-value {

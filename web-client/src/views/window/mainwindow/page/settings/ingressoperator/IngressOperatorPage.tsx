@@ -57,6 +57,9 @@ interface IngressReplayQueueState {
         enabled: boolean;
         pollMs: number;
         delaysMs: number[];
+        paused?: boolean;
+        pauseReason?: string;
+        pausedAt?: string;
     };
     counts: {
         total: number;
@@ -103,6 +106,12 @@ interface IngressOperatorState {
             manager: string;
             managedBySidecar: boolean;
         };
+        control: {
+            paused: boolean;
+            pauseReason: string;
+            pausedAt: string;
+            updatedAt: string;
+        };
     };
     runtimeNote: string;
 }
@@ -114,6 +123,9 @@ const createDefaultOperatorState = (): IngressOperatorState => ({
             enabled: false,
             pollMs: 5000,
             delaysMs: [],
+            paused: false,
+            pauseReason: "",
+            pausedAt: "",
         },
         counts: {
             total: 0,
@@ -155,6 +167,12 @@ const createDefaultOperatorState = (): IngressOperatorState => ({
             lastError: "",
             manager: "none",
             managedBySidecar: false,
+        },
+        control: {
+            paused: false,
+            pauseReason: "",
+            pausedAt: "",
+            updatedAt: "",
         },
     },
     runtimeNote: "当前没有可用的 ingress operator 状态。",
@@ -217,6 +235,7 @@ export default defineComponent({
         const lastError = ref("");
         const includeResolved = ref(false);
         const pendingActionIds = ref<Record<string, string>>({});
+        const controlAction = ref("");
 
         const loadOperatorState = async (showToast = false) => {
             isLoading.value = true;
@@ -252,6 +271,10 @@ export default defineComponent({
                         serviceStatus: {
                             ...createDefaultOperatorState().backgroundReplay.serviceStatus,
                             ...(state?.backgroundReplay?.serviceStatus || {}),
+                        },
+                        control: {
+                            ...createDefaultOperatorState().backgroundReplay.control,
+                            ...(state?.backgroundReplay?.control || {}),
                         },
                     },
                     routes: Array.isArray(state?.routes) ? state.routes : [],
@@ -335,6 +358,59 @@ export default defineComponent({
             });
         };
 
+        const withControlAction = async (actionKey: string, handler: () => Promise<void>) => {
+            controlAction.value = actionKey;
+            try {
+                await handler();
+            } finally {
+                controlAction.value = "";
+            }
+        };
+
+        const handlePauseBackgroundReplay = async () => {
+            await withControlAction("pause", async () => {
+                const result = await backendStore.requestServiceConfig("pauseIngressBackgroundReplay", "operator-ui") as {
+                    error?: string;
+                } | null;
+                if (result?.error) {
+                    notifyStore.showToast({
+                        type: "error",
+                        message: result.error,
+                        duration: 2600,
+                    });
+                } else {
+                    notifyStore.showToast({
+                        type: "success",
+                        message: backendStore.translate("自动重放已暂停"),
+                        duration: 1800,
+                    });
+                }
+                await loadOperatorState(false);
+            });
+        };
+
+        const handleResumeBackgroundReplay = async () => {
+            await withControlAction("resume", async () => {
+                const result = await backendStore.requestServiceConfig("resumeIngressBackgroundReplay") as {
+                    error?: string;
+                } | null;
+                if (result?.error) {
+                    notifyStore.showToast({
+                        type: "error",
+                        message: result.error,
+                        duration: 2600,
+                    });
+                } else {
+                    notifyStore.showToast({
+                        type: "success",
+                        message: backendStore.translate("自动重放已恢复"),
+                        duration: 1800,
+                    });
+                }
+                await loadOperatorState(false);
+            });
+        };
+
         onMounted(() => {
             void loadOperatorState(false);
         });
@@ -342,6 +418,8 @@ export default defineComponent({
         const headerTitleText = computed(() => "IM Bridge");
         const headerSubtitleText = computed(() => "查看 reply route、replay queue 和当前 delivery policy。");
         const refreshButtonText = computed(() => isLoading.value ? "刷新中..." : "刷新状态");
+        const pauseButtonText = computed(() => controlAction.value === "pause" ? "暂停中..." : "暂停自动重放");
+        const resumeButtonText = computed(() => controlAction.value === "resume" ? "恢复中..." : "恢复自动重放");
         const workerModeText = computed(() =>
             operatorState.value.backgroundReplay.mode === "standalone-service"
                 ? "Standalone Replay Service"
@@ -364,6 +442,13 @@ export default defineComponent({
         const supportedTransportText = computed(() =>
             operatorState.value.supportedReplyTransports.map(normalizeTransportLabel).join(" / "),
         );
+        const backgroundReplayControlText = computed(() => {
+            if (!operatorState.value.backgroundReplay.enabled) {
+                return "未启用";
+            }
+
+            return operatorState.value.backgroundReplay.control.paused ? "已暂停" : "自动运行";
+        });
         const workerRuntimeText = computed(() => {
             if (!operatorState.value.backgroundReplay.hasDedicatedReplayService) {
                 return "由 sidecar 进程内 worker 驱动";
@@ -439,11 +524,15 @@ export default defineComponent({
             isLoading,
             lastError,
             includeResolved,
+            controlAction,
             headerTitleText,
             headerSubtitleText,
             refreshButtonText,
+            pauseButtonText,
+            resumeButtonText,
             workerModeText,
             supportedTransportText,
+            backgroundReplayControlText,
             workerRuntimeText,
             summaryBadges,
             canReplayEntry,
@@ -455,6 +544,8 @@ export default defineComponent({
             normalizeTransportLabel,
             deliveryStrategyText,
             loadOperatorState,
+            handlePauseBackgroundReplay,
+            handleResumeBackgroundReplay,
             handleReplayEntry,
             handleResolveEntry,
         };
@@ -505,8 +596,38 @@ export default defineComponent({
                                     <div class="ingress-operator-page__panel">
                                         <div class="ingress-operator-page__panel-header">
                                             <div class="ingress-operator-page__panel-title">Delivery Policy</div>
-                                            <div class={["ingress-operator-page__badge", this.operatorState.backgroundReplay.enabled ? "ingress-operator-page__badge--success" : "ingress-operator-page__badge--neutral"]}>
-                                                {this.operatorState.backgroundReplay.enabled ? "Worker 已启用" : "Worker 已关闭"}
+                                            <div class="ingress-operator-page__panel-header-actions">
+                                                <div
+                                                    class={[
+                                                        "ingress-operator-page__badge",
+                                                        this.operatorState.backgroundReplay.enabled
+                                                            ? (this.operatorState.backgroundReplay.control.paused
+                                                                ? "ingress-operator-page__badge--warning"
+                                                                : "ingress-operator-page__badge--success")
+                                                            : "ingress-operator-page__badge--neutral",
+                                                    ]}
+                                                    data-ingress-operator-control-state
+                                                >
+                                                    {this.operatorState.backgroundReplay.enabled
+                                                        ? (this.operatorState.backgroundReplay.control.paused ? "自动重放已暂停" : "Worker 已启用")
+                                                        : "Worker 已关闭"}
+                                                </div>
+                                                {this.operatorState.backgroundReplay.enabled && !this.operatorState.backgroundReplay.control.paused && (
+                                                    <TextButton
+                                                        text={this.pauseButtonText}
+                                                        disabled={this.controlAction === "resume"}
+                                                        data-ingress-operator-pause-action
+                                                        onClick={() => void this.handlePauseBackgroundReplay()}
+                                                    />
+                                                )}
+                                                {this.operatorState.backgroundReplay.enabled && this.operatorState.backgroundReplay.control.paused && (
+                                                    <TextButton
+                                                        text={this.resumeButtonText}
+                                                        disabled={this.controlAction === "pause"}
+                                                        data-ingress-operator-resume-action
+                                                        onClick={() => void this.handleResumeBackgroundReplay()}
+                                                    />
+                                                )}
                                             </div>
                                         </div>
                                         <div class="ingress-operator-page__fact-grid">
@@ -532,6 +653,10 @@ export default defineComponent({
                                                         : "未启用"}
                                                 </div>
                                             </div>
+                                            <div class="ingress-operator-page__fact-item">
+                                                <div class="ingress-operator-page__fact-label">治理状态</div>
+                                                <div class="ingress-operator-page__fact-value">{this.backgroundReplayControlText}</div>
+                                            </div>
                                             <div class="ingress-operator-page__fact-item" data-ingress-operator-delivery-strategy>
                                                 <div class="ingress-operator-page__fact-label">退避策略</div>
                                                 <div class="ingress-operator-page__fact-value">{this.deliveryStrategyText}</div>
@@ -540,6 +665,22 @@ export default defineComponent({
                                                 <div class="ingress-operator-page__fact-label">Worker 状态</div>
                                                 <div class="ingress-operator-page__fact-value">{this.workerRuntimeText}</div>
                                             </div>
+                                            {this.operatorState.backgroundReplay.control.paused && (
+                                                <div class="ingress-operator-page__fact-item" data-ingress-operator-paused-at>
+                                                    <div class="ingress-operator-page__fact-label">暂停时间</div>
+                                                    <div class="ingress-operator-page__fact-value">
+                                                        {this.formatTimeLabel(this.operatorState.backgroundReplay.control.pausedAt) || "-"}
+                                                    </div>
+                                                </div>
+                                            )}
+                                            {this.operatorState.backgroundReplay.control.paused && this.operatorState.backgroundReplay.control.pauseReason && (
+                                                <div class="ingress-operator-page__fact-item" data-ingress-operator-pause-reason>
+                                                    <div class="ingress-operator-page__fact-label">暂停原因</div>
+                                                    <div class="ingress-operator-page__fact-value">
+                                                        {this.operatorState.backgroundReplay.control.pauseReason}
+                                                    </div>
+                                                </div>
+                                            )}
                                             {this.operatorState.backgroundReplay.hasDedicatedReplayService && (
                                                 <div class="ingress-operator-page__fact-item" data-ingress-operator-service-heartbeat>
                                                     <div class="ingress-operator-page__fact-label">最近心跳</div>

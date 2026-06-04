@@ -80,6 +80,8 @@ const state = {
     lastHeartbeatAt: "",
     lastRunAt: "",
     lastError: "",
+    paused: false,
+    pausedAt: "",
     manager: backgroundReplayMode === "service" ? "sidecar" : "external",
     managedBySidecar: backgroundReplayMode === "service",
 };
@@ -110,6 +112,20 @@ while (!stopping) {
         const replayQueue = await postJson(baseUrl, "/ingress/get-replay-queue", {
             includeResolved: false,
         });
+        if (replayQueue?.worker?.paused === true) {
+            await persistStatus({
+                running: true,
+                paused: true,
+                pausedAt: typeof replayQueue?.worker?.pausedAt === "string" ? replayQueue.worker.pausedAt : "",
+                lastRunAt: cycleStartedAt,
+                lastError: "",
+            });
+            if (!stopping) {
+                await wait(pollMs);
+            }
+            continue;
+        }
+
         const dueEntries = collectDueReplayEntries(replayQueue);
 
         for (const entry of dueEntries) {
@@ -121,12 +137,16 @@ while (!stopping) {
 
         await persistStatus({
             running: true,
+            paused: false,
+            pausedAt: "",
             lastRunAt: cycleStartedAt,
             lastError: "",
         });
     } catch (error) {
         await persistStatus({
             running: true,
+            paused: false,
+            pausedAt: "",
             lastRunAt: cycleStartedAt,
             lastError: error instanceof Error ? error.message : String(error),
         });

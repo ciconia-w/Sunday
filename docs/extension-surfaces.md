@@ -129,13 +129,14 @@ Current state:
 - persisted replay queue and sidecar operator API now exist for failed reply delivery
 - pending reply deliveries can now be retried by an in-process worker, a sidecar-managed dedicated replay service child process, or a standalone replay service process
 - extension workspace now also has a minimal `IM Bridge` operator UI backed by `serviceConfig`
+- operator governance now includes persisted pause/resume for automatic replay, and the pause state survives sidecar restarts
 
 Current gaps:
 
 - platform-specific bridge logic still needs to be layered on top of the generic ingress contract
 - provider coverage is still narrow; broader platform coverage is still missing
 - replay service process can now run standalone, but queue / route ownership and persistence still live in sidecar
-- retry policy is richer but still intentionally minimal; platform-specific delivery receipts and pause/resume governance are still missing
+- retry policy is richer but still intentionally minimal; platform-specific delivery receipts and replay history / finer governance are still missing
 
 Recommended next step:
 
