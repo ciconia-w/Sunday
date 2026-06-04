@@ -41,6 +41,7 @@
     "verify:cli-tools-api": "node ./scripts/verify-cli-tools-api.mjs",
     "verify:mcp-api": "node ./scripts/verify-mcp-api.mjs",
     "verify:skills-api": "node ./scripts/verify-skills-api.mjs",
+    "verify:skills-import-source": "node ./scripts/verify-skills-import-source.mjs",
     "verify:ingress-api": "node ./scripts/verify-ingress-api.mjs",
     "verify:system-channel": "bash ./scripts/verify-system-channel.sh",
     "verify:file-channel": "bash ./scripts/verify-file-channel.sh",

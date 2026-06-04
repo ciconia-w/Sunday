@@ -9,7 +9,7 @@ export interface SkillItem {
     description: string;
     /** 技能所在目录路径 */
     path: string;
-    /** 技能来源（builtin/uos-ai/claude/vscode/...） */
+    /** 技能来源（builtin/local/repo/...） */
     source: string;
     /** 是否启用 */
     enabled: boolean;

@@ -7,6 +7,13 @@ import type { SkillItem } from "@/types/skill";
 import type { ToolManagementCustomAction } from "@/views/window/mainwindow/page/settings/common/types";
 import "@/assets/styles/window/mainwindow/page/settings/skills/SkillsPage.css";
 
+interface SkillImportResult {
+    success?: boolean;
+    cancelled?: boolean;
+    error?: string;
+    skill?: SkillItem;
+}
+
 export default defineComponent({
     name: "SkillsPage",
     components: {
@@ -38,7 +45,7 @@ export default defineComponent({
 
         const handleImportSkill = async () => {
             try {
-                const result = await backendStore.requestSkillsMgr("addSkillForWeb");
+                const result = await backendStore.requestSkillsMgr("addSkillForWeb") as SkillImportResult;
 
                 if (result.success) {
                     notifyStore.showToast({

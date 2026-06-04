@@ -112,6 +112,8 @@ Date: 2026-06-03
   - 登录 / 重新登录 / 安装 / 诊断动作入口
   - CLI 列表不再把状态开关当成主操作按钮
 - skills inventory 现在会过滤 frontmatter 噪声，展示更干净的描述，并把 source/path 作为可见上下文暴露在列表里
+- skills 页面现在已接通本地目录导入；导入会复制到受管的 user skills root，已导入 skill 也支持从页面删除
+- skills API verifier 现在会在临时 skills root 下验证导入/删除闭环，不会污染真实 `~/.codex/skills`
 - `CLI tools` 已具备 sidecar 统一状态模型
 - `browser control` 已具备默认关闭、按需启用、按需注册工具的基础能力
 - Qt host 的 `serviceConfig` 已补齐浏览器 / CLI / MCP 基本 runtime bridge
@@ -192,8 +194,8 @@ Date: 2026-06-03
     - tool preview
     - clearer error feedback
 3. skills / CLI productization:
-   - skills import/install
-   - CLI dynamic discovery / version / auth actions
+   - skills GitHub 导入 / 更明确的 source-of-truth 入口
+   - CLI latest version / update guidance
 4. 然后再进入更大的扩展平台方向：
    - IM bridge
    - extension install / market flows

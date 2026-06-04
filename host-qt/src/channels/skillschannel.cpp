@@ -1,6 +1,7 @@
 #include "hostqt/channels/skillschannel.h"
 #include "hostqt/sidecarclient.h"
 
+#include <QFileDialog>
 #include <QJsonArray>
 
 namespace hostqt {
@@ -63,10 +64,38 @@ bool SkillsChannel::hasSkill(const QString &skillName) const
 QJsonObject SkillsChannel::addSkillForWeb() const
 {
     QJsonObject root;
-    root.insert("success", false);
-    root.insert("error", QStringLiteral("not implemented"));
+    if (!m_sidecarClient) {
+        root.insert("success", false);
+        root.insert("error", QStringLiteral("sidecar unavailable"));
+        return root;
+    }
+
+    const QString selectedDir = QFileDialog::getExistingDirectory(
+        nullptr,
+        QStringLiteral("选择技能目录"),
+        QString());
+    if (selectedDir.isEmpty()) {
+        root.insert("success", false);
+        root.insert("cancelled", true);
+        return root;
+    }
+
+    QString errorMessage;
+    const QJsonObject importedSkill = m_sidecarClient->postJsonSync(
+        QStringLiteral("/skills/import-local"),
+        QVariantMap{{QStringLiteral("sourcePath"), selectedDir}},
+        &errorMessage);
+    if (!errorMessage.isEmpty()) {
+        root.insert("success", false);
+        root.insert("error", errorMessage);
+        return root;
+    }
+
+    root.insert("success", true);
+    root.insert("skill", importedSkill);
     return root;
 }
+
 bool SkillsChannel::removeSkill(const QString &skillName)
 {
     if (!m_sidecarClient) {
