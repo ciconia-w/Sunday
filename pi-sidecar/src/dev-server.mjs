@@ -814,16 +814,50 @@ const server = createServer(async (_req, res) => {
         return;
     }
 
-    if (_req.method === "POST" && _req.url === "/ingress/message") {
+    if (_req.method === "POST" && _req.url?.startsWith("/ingress/")) {
         let raw = "";
         _req.on("data", (chunk) => {
             raw += chunk;
         });
         _req.on("end", async () => {
-            const body = raw ? JSON.parse(raw) : {};
-            const result = await externalIngress.acceptMessage(body);
-            res.writeHead(result.ok ? 200 : 400, { "content-type": "application/json; charset=utf-8" });
-            res.end(JSON.stringify(result));
+            try {
+                const body = raw ? JSON.parse(raw) : {};
+                let result = null;
+                let statusCode = 200;
+
+                if (_req.url === "/ingress/message") {
+                    result = await externalIngress.acceptMessage(body);
+                    statusCode = result.ok ? 200 : 400;
+                    res.writeHead(statusCode, { "content-type": "application/json; charset=utf-8" });
+                    res.end(JSON.stringify(result));
+                    return;
+                } else if (_req.url === "/ingress/get-reply-routes") {
+                    result = await externalIngress.listReplyRoutes();
+                } else if (_req.url === "/ingress/get-replay-queue") {
+                    result = await externalIngress.getReplayQueue({
+                        includeResolved: body.includeResolved === true,
+                    });
+                } else if (_req.url === "/ingress/replay-queue/replay") {
+                    result = await externalIngress.replayQueuedReply(body.id ?? "");
+                } else if (_req.url === "/ingress/replay-queue/resolve") {
+                    result = await externalIngress.resolveReplayQueueEntry(body.id ?? "", body.resolution ?? "");
+                } else {
+                    res.writeHead(404, { "content-type": "application/json; charset=utf-8" });
+                    res.end(JSON.stringify({ ok: false, error: "Unknown ingress endpoint" }));
+                    return;
+                }
+
+                res.writeHead(statusCode, { "content-type": "application/json; charset=utf-8" });
+                res.end(JSON.stringify({ ok: true, result }));
+            } catch (error) {
+                res.writeHead(400, { "content-type": "application/json; charset=utf-8" });
+                res.end(
+                    JSON.stringify({
+                        ok: false,
+                        error: error instanceof Error ? error.message : String(error),
+                    }),
+                );
+            }
         });
         return;
     }
