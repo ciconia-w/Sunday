@@ -128,6 +128,8 @@ Date: 2026-06-03
   - `POST /ingress/message`
   - `source + channelId + threadId` 的稳定 conversation / session 路由
   - headless ingress reply 的 conversation 持久化
+  - generic webhook reply push
+  - webhook route 的 sidecar runtime 持久化与重载
 - `browser control` 已具备默认关闭、按需启用、按需注册工具的基础能力
 - Qt host 的 `serviceConfig` 已补齐浏览器 / CLI / MCP 基本 runtime bridge
 - 浏览器运行时能力画像已下沉到 sidecar：`stableTabSwitch`、`stableScreenshotCapture`、`runtimeLimitNotice`、`knownIssues` 由 `browser-control.mjs` 统一给出，前端不再直接写死 OpenCLI 版本判断
@@ -209,8 +211,9 @@ Date: 2026-06-03
 3. skills / CLI productization:
    - CLI install / update 路线继续产品化
 4. IM bridge refinement:
-   - reply push / transport adapter
    - provider-specific ingress integration
+   - provider-specific push/reply adapter
+   - retry queue / signature / delivery reliability
 5. 然后再进入更大的扩展平台方向：
    - extension install / market flows
    - architecture / performance cleanup

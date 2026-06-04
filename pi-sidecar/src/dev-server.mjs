@@ -32,7 +32,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const bridgeDir = resolve(__dirname, "bridge");
 const staticDir = resolve(__dirname, "static");
 const workspaceDir = resolve(process.cwd(), "..");
-const runtimeDir = resolve(process.cwd(), ".pi-sidecar");
+const runtimeDir = resolve(process.env.PERSONAL_AGENT_RUNTIME_DIR || resolve(process.cwd(), ".pi-sidecar"));
 const userSkillsDir = resolve(process.env.PERSONAL_AGENT_SKILLS_USER_DIR || join(homedir(), ".codex", "skills"));
 const repoSkillsDir = resolve(process.env.PERSONAL_AGENT_SKILLS_REPO_DIR || resolve(workspaceDir, "skills"));
 
@@ -139,6 +139,7 @@ const externalIngress = new ExternalIngress({
     defaultModelId: runtimeConfig.modelId,
     conversationRepository,
     sessionBridge,
+    runtimeDir,
 });
 
 function normalizeRuntimeModelId(modelId) {
@@ -179,8 +180,8 @@ function reloadRuntimeConfig() {
     sessionBridge.setDefaultModelId(runtimeConfig.modelId);
     sessionBridge.setAssistantModel("uos-ai-generic", runtimeConfig.modelId);
     sessionBridge.setAssistantModel("uos-ai-writing", runtimeConfig.modelId);
-    externalIngress.provider = runtimeConfig.provider;
-    externalIngress.defaultModelId = runtimeConfig.modelId;
+    externalIngress.options.provider = runtimeConfig.provider;
+    externalIngress.options.defaultModelId = runtimeConfig.modelId;
     applyRuntimeConfig();
 }
 
@@ -282,9 +283,54 @@ async function persistHeadlessSessionRender(event, sessionId, message) {
 }
 
 sessionBridge.sessionEvent.connect((event, sessionId, message) => {
+    if (event === UosSessionEvent.SeStarted) {
+        externalIngress.handleSessionStarted(sessionId);
+    }
+
+    const renderSnapshot =
+        event === UosSessionEvent.SeFinished
+            ? (() => {
+                  const current = sessionRenderState.get(sessionId);
+                  if (!current) {
+                      return null;
+                  }
+
+                  return {
+                      conversationId: current.conversationId,
+                      renderItems: JSON.parse(JSON.stringify(current.renderItems)),
+                  };
+              })()
+            : null;
+
     persistHeadlessSessionRender(event, sessionId, message).catch((error) => {
         console.error("[dev-server] background session render persistence failed:", error);
     });
+
+    if (event === UosSessionEvent.SeFinished) {
+        let parsed = {};
+        try {
+            parsed = JSON.parse(message);
+        } catch {
+            parsed = {};
+        }
+
+        externalIngress
+            .handleSessionFinished(sessionId, {
+                id: parsed?.id ?? "",
+                conversation_id: parsed?.conversation_id ?? renderSnapshot?.conversationId ?? "",
+                renderItems: renderSnapshot?.renderItems ?? [],
+            })
+            .catch((error) => {
+                console.error("[dev-server] external ingress reply push failed:", error);
+            });
+    }
+
+    if (event === UosSessionEvent.SeError) {
+        externalIngress.handleSessionError(sessionId, message).catch((error) => {
+            console.error("[dev-server] external ingress error push failed:", error);
+        });
+    }
+
     emitSession(event, sessionId, message);
 });
 

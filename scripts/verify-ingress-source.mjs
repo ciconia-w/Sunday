@@ -19,12 +19,25 @@ const checks = {
     routeCreatesStableSessionId: externalIngressSource.includes("`ext-sess-${routeToken}`"),
     followupLinksToConversationTail: externalIngressSource.includes("getConversationTailMessageId"),
     ingressPersistsConversationRoot: externalIngressSource.includes("saveConversation(payload.conversation_id)"),
+    ingressStoresReplyWebhookRoute: externalIngressSource.includes("replyWebhookUrl")
+        && externalIngressSource.includes("routeStorePath")
+        && externalIngressSource.includes("saveRouteTargets"),
+    ingressPushesReplyOnFinish: externalIngressSource.includes("handleSessionFinished")
+        && externalIngressSource.includes("postReply"),
+    ingressPushesErrorOnFailure: externalIngressSource.includes("handleSessionError")
+        && externalIngressSource.includes("errorCode"),
     headlessRepliesPersistOnFinish: devServerSource.includes("persistHeadlessSessionRender")
         && devServerSource.includes("setConversationRender")
         && devServerSource.includes("saveConversation(current.conversationId)"),
+    devServerTriggersReplyPush: devServerSource.includes("handleSessionStarted")
+        && devServerSource.includes("handleSessionFinished")
+        && devServerSource.includes("handleSessionError"),
     docExplainsThreadRouting: ingressDocSource.includes("threadId")
         && ingressDocSource.includes("同一 thread")
         && ingressDocSource.includes("/ingress/message"),
+    docExplainsWebhookReply: ingressDocSource.includes("replyWebhookUrl")
+        && ingressDocSource.includes("webhook")
+        && ingressDocSource.includes("assistantText"),
 };
 
 const verdict = Object.values(checks).every(Boolean)
