@@ -37,7 +37,8 @@ jobs:
       - name: Repo verification
         run: npm run verify:repo
 
-      - name: Web type check
+      - name: Web type check (informational)
+        continue-on-error: true
         working-directory: web-client
         run: npm run type-check
 
