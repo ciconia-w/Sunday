@@ -74,6 +74,11 @@ interface IngressReplayQueueEntry {
         providerMessage?: string;
         responseBodyPreview?: string;
         providerPayloadPreview?: string;
+        receiptCategory?: string;
+        receiptCategoryLabel?: string;
+        automaticReplayEligible?: boolean;
+        governanceAction?: string;
+        governanceHint?: string;
     } | null;
     processing?: {
         ownerId?: string;
@@ -102,7 +107,16 @@ interface IngressReplayQueueState {
         resolved: number;
         discarded: number;
     };
+    receiptCategoryCounts?: Record<string, number>;
     entries: IngressReplayQueueEntry[];
+}
+
+interface IngressReceiptTaxonomyCategory {
+    id: string;
+    label: string;
+    automaticReplayEligible: boolean;
+    governanceAction: string;
+    description: string;
 }
 
 interface IngressOperatorState {
@@ -153,6 +167,11 @@ interface IngressOperatorState {
             serviceUsesSidecarOperatorApi: boolean;
         };
     };
+    receiptTaxonomy: {
+        categories: IngressReceiptTaxonomyCategory[];
+        automaticReplayCategories: string[];
+        operatorManagedCategories: string[];
+    };
     runtimeNote: string;
 }
 
@@ -176,6 +195,7 @@ const createDefaultOperatorState = (): IngressOperatorState => ({
             resolved: 0,
             discarded: 0,
         },
+        receiptCategoryCounts: {},
         entries: [],
     },
     supportedReplyTransports: ["webhook", "lark-bot-webhook", "dingtalk-bot-webhook", "slack-webhook", "discord-webhook", "teams-webhook"],
@@ -223,6 +243,11 @@ const createDefaultOperatorState = (): IngressOperatorState => ({
             serviceUsesSidecarOperatorApi: false,
         },
     },
+    receiptTaxonomy: {
+        categories: [],
+        automaticReplayCategories: [],
+        operatorManagedCategories: [],
+    },
     runtimeNote: "当前没有可用的 ingress operator 状态。",
 });
 
@@ -269,6 +294,38 @@ function normalizeTransportLabel(transport: string) {
     }
 
     return transport || "unknown";
+}
+
+function normalizeGovernanceActionLabel(action: string) {
+    if (action === "retry") {
+        return "继续自动重试";
+    }
+
+    if (action === "retry-later") {
+        return "延后自动重试";
+    }
+
+    if (action === "check-credentials") {
+        return "检查凭证";
+    }
+
+    if (action === "update-provider-policy") {
+        return "调整 Provider 策略";
+    }
+
+    if (action === "fix-request") {
+        return "修正请求";
+    }
+
+    if (action === "inspect-provider") {
+        return "人工检查";
+    }
+
+    if (action === "none") {
+        return "无需处理";
+    }
+
+    return action || "unknown";
 }
 
 function formatReplayHistoryTitle(event: IngressReplayHistoryEvent) {
@@ -361,6 +418,9 @@ export default defineComponent({
                             ...createDefaultOperatorState().replayQueue.counts,
                             ...(state?.replayQueue?.counts || {}),
                         },
+                        receiptCategoryCounts: {
+                            ...(state?.replayQueue?.receiptCategoryCounts || {}),
+                        },
                         entries: Array.isArray(state?.replayQueue?.entries)
                             ? state.replayQueue.entries.map((entry) => ({
                                 ...entry,
@@ -389,6 +449,19 @@ export default defineComponent({
                             ...createDefaultOperatorState().backgroundReplay.ownership,
                             ...(state?.backgroundReplay?.ownership || {}),
                         },
+                    },
+                    receiptTaxonomy: {
+                        ...createDefaultOperatorState().receiptTaxonomy,
+                        ...(state?.receiptTaxonomy || {}),
+                        categories: Array.isArray(state?.receiptTaxonomy?.categories)
+                            ? state.receiptTaxonomy.categories
+                            : [],
+                        automaticReplayCategories: Array.isArray(state?.receiptTaxonomy?.automaticReplayCategories)
+                            ? state.receiptTaxonomy.automaticReplayCategories
+                            : [],
+                        operatorManagedCategories: Array.isArray(state?.receiptTaxonomy?.operatorManagedCategories)
+                            ? state.receiptTaxonomy.operatorManagedCategories
+                            : [],
                     },
                     routes: Array.isArray(state?.routes) ? state.routes : [],
                     supportedReplyTransports: Array.isArray(state?.supportedReplyTransports)
@@ -578,6 +651,38 @@ export default defineComponent({
                 ? "依赖 sidecar operator API"
                 : "worker 直接访问 shared store";
         });
+        const receiptCategoryLabelMap = computed(() => new Map(
+            operatorState.value.receiptTaxonomy.categories.map((category) => [category.id, category.label]),
+        ));
+        const automaticReplayCategoryText = computed(() => {
+            if (!operatorState.value.receiptTaxonomy.automaticReplayCategories.length) {
+                return "未提供";
+            }
+
+            return operatorState.value.receiptTaxonomy.automaticReplayCategories
+                .map((categoryId) => receiptCategoryLabelMap.value.get(categoryId) || categoryId)
+                .join(" / ");
+        });
+        const operatorManagedCategoryText = computed(() => {
+            if (!operatorState.value.receiptTaxonomy.operatorManagedCategories.length) {
+                return "未提供";
+            }
+
+            return operatorState.value.receiptTaxonomy.operatorManagedCategories
+                .map((categoryId) => receiptCategoryLabelMap.value.get(categoryId) || categoryId)
+                .join(" / ");
+        });
+        const receiptCategoryCountText = computed(() => {
+            const counts = operatorState.value.replayQueue.receiptCategoryCounts || {};
+            const entries = Object.entries(counts);
+            if (!entries.length) {
+                return "当前无回执分类统计";
+            }
+
+            return entries
+                .map(([categoryId, count]) => `${receiptCategoryLabelMap.value.get(categoryId) || categoryId} ${count}`)
+                .join(" / ");
+        });
         const backgroundReplayControlText = computed(() => {
             if (!operatorState.value.backgroundReplay.enabled) {
                 return "未启用";
@@ -676,6 +781,9 @@ export default defineComponent({
             queueOwnershipText,
             routeOwnershipText,
             operatorApiDependencyText,
+            automaticReplayCategoryText,
+            operatorManagedCategoryText,
+            receiptCategoryCountText,
             backgroundReplayControlText,
             workerRuntimeText,
             summaryBadges,
@@ -686,6 +794,7 @@ export default defineComponent({
             formatTimeLabel,
             formatDelayList,
             normalizeTransportLabel,
+            normalizeGovernanceActionLabel,
             formatReplayHistoryTitle,
             formatReplayHistoryDetail,
             deliveryStrategyText,
@@ -823,6 +932,18 @@ export default defineComponent({
                                                 <div class="ingress-operator-page__fact-label">Worker Access</div>
                                                 <div class="ingress-operator-page__fact-value">{this.operatorApiDependencyText}</div>
                                             </div>
+                                            <div class="ingress-operator-page__fact-item" data-ingress-operator-receipt-taxonomy>
+                                                <div class="ingress-operator-page__fact-label">自动重放分类</div>
+                                                <div class="ingress-operator-page__fact-value">{this.automaticReplayCategoryText}</div>
+                                            </div>
+                                            <div class="ingress-operator-page__fact-item" data-ingress-operator-operator-managed-categories>
+                                                <div class="ingress-operator-page__fact-label">人工处理分类</div>
+                                                <div class="ingress-operator-page__fact-value">{this.operatorManagedCategoryText}</div>
+                                            </div>
+                                            <div class="ingress-operator-page__fact-item" data-ingress-operator-receipt-counts>
+                                                <div class="ingress-operator-page__fact-label">当前回执分类</div>
+                                                <div class="ingress-operator-page__fact-value">{this.receiptCategoryCountText}</div>
+                                            </div>
                                             {this.operatorState.backgroundReplay.control.paused && (
                                                 <div class="ingress-operator-page__fact-item" data-ingress-operator-paused-at>
                                                     <div class="ingress-operator-page__fact-label">暂停时间</div>
@@ -933,6 +1054,26 @@ export default defineComponent({
                                                                     {entry.latestReceipt.statusText ? ` ${entry.latestReceipt.statusText}` : ""}
                                                                 </div>
                                                                 <div>At: {this.formatTimeLabel(entry.latestReceipt.at || "") || "-"}</div>
+                                                                {entry.latestReceipt.receiptCategoryLabel ? (
+                                                                    <div data-ingress-replay-receipt-category>
+                                                                        Receipt Category: {entry.latestReceipt.receiptCategoryLabel}
+                                                                    </div>
+                                                                ) : null}
+                                                                {entry.latestReceipt.governanceAction ? (
+                                                                    <div data-ingress-replay-receipt-governance-action>
+                                                                        Governance Action: {this.normalizeGovernanceActionLabel(entry.latestReceipt.governanceAction)}
+                                                                    </div>
+                                                                ) : null}
+                                                                {typeof entry.latestReceipt.automaticReplayEligible === "boolean" ? (
+                                                                    <div data-ingress-replay-receipt-replay-eligibility>
+                                                                        Automatic Replay: {entry.latestReceipt.automaticReplayEligible ? "eligible" : "operator-managed"}
+                                                                    </div>
+                                                                ) : null}
+                                                                {entry.latestReceipt.governanceHint ? (
+                                                                    <div data-ingress-replay-receipt-governance-hint>
+                                                                        Governance Hint: {entry.latestReceipt.governanceHint}
+                                                                    </div>
+                                                                ) : null}
                                                                 {entry.latestReceipt.error ? <div>Error: {entry.latestReceipt.error}</div> : null}
                                                                 {entry.latestReceipt.providerCode ? (
                                                                     <div data-ingress-replay-receipt-provider-code>

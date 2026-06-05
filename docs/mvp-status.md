@@ -166,6 +166,12 @@ Date: 2026-06-03
   - replay queue entry 现在会在 operator state 中保留初始失败、自动/手动重试以及 resolve 的历史事件
   - replay queue entry 现在也会暴露 `latestReceipt` 和 `processing`，operator UI 可直接看到最近回执和当前 claim owner
   - provider-specific receipt 现在开始结构化暴露 `providerCode` / `providerMessage` / `responseBodyPreview`，DingTalk / Lark 的应用层失败不会再被误看成单纯 HTTP 成功
+  - reply delivery receipt 现在还会稳定给出 taxonomy / governance 字段：
+    - `receiptCategory`
+    - `automaticReplayEligible`
+    - `governanceAction`
+    - `governanceHint`
+  - automatic replay 现在会按 receipt taxonomy 决策；明显不适合重试的 provider 失败会直接转入 `awaiting-operator`
   - dedicated / standalone replay worker 现在直接读取 shared replay queue，不再通过 sidecar operator API 轮询待重放项
   - `IM Bridge` operator UI 现在会显式展示 queue ownership / route persistence / automatic replay executor
 - `browser control` 已具备默认关闭、按需启用、按需注册工具的基础能力

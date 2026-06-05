@@ -262,7 +262,26 @@ reply queue 会额外保留：
 
 - DingTalk / Lark 这类 transport 会把应用层返回里的 `code` / `errcode` 和 `msg` / `errmsg` 暴露到 `latestReceipt`
 - 当平台返回 `HTTP 200` 但 provider code 非成功态时，Sunday 会按失败处理，并把 `providerCode`、`providerMessage`、`responseBodyPreview` 写进 replay queue
-- 更细的平台专属 receipt taxonomy 仍然可以继续扩，但最小可操作治理面已经具备
+- `latestReceipt` 现在还会进一步补齐：
+  - `receiptCategory`
+  - `receiptCategoryLabel`
+  - `automaticReplayEligible`
+  - `governanceAction`
+  - `governanceHint`
+- 当前最小 taxonomy 已覆盖：
+  - `transport-network`
+  - `http-rate-limit`
+  - `http-server`
+  - `http-auth`
+  - `http-client`
+  - `provider-rate-limit`
+  - `provider-auth`
+  - `provider-policy`
+  - `provider-invalid-request`
+  - `provider-unknown`
+- 这意味着 sidecar/operator 不再只看到“失败了”，而是能直接区分：
+  - 适合继续自动重放的失败
+  - 应该先检查凭证、策略或请求结构的失败
 
 ## Background Replay
 
@@ -275,6 +294,7 @@ reply queue 现在已经有最小 background replay worker。
 - 到达 `nextAttemptAt` 后自动重放
 - 自动重放成功后会把 entry 标成 `delivered`
 - 自动重放超出当前 delay policy 后，会把 entry 标成 `awaiting-operator`
+- 如果 `latestReceipt.automaticReplayEligible=false`，entry 会直接进入 `awaiting-operator`，不会继续消耗 automatic replay budget
 - operator 现在可以显式暂停 / 恢复 automatic replay
 - pause 状态会保存在：
   - `external-ingress-operator-control.json`
@@ -381,6 +401,7 @@ background replay 当前支持两类 delivery policy：
 - route persistence / replay queue ownership
 - automatic replay executor
 - 最近一次 delivery receipt
+- receipt taxonomy / governance advice
 - 当前 processing owner
 
 ### Reply routes

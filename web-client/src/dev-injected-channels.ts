@@ -263,6 +263,11 @@ export function ensureDevInjectedChannels() {
                     providerMessage: "",
                     responseBodyPreview: "error",
                     providerPayloadPreview: "{\"text\":\"Sunday 处理失败：demo webhook timeout\"}",
+                    receiptCategory: "http-server",
+                    receiptCategoryLabel: "HTTP Server Error",
+                    automaticReplayEligible: true,
+                    governanceAction: "retry",
+                    governanceHint: "上游 5xx 或超时类错误，适合继续自动重试。",
                 },
                 processing: null as { ownerId?: string } | null,
                 history: [
@@ -328,6 +333,11 @@ export function ensureDevInjectedChannels() {
                     providerMessage: "",
                     responseBodyPreview: "ok",
                     providerPayloadPreview: "{\"ok\":true,\"assistantText\":\"已完成处理\"}",
+                    receiptCategory: "success",
+                    receiptCategoryLabel: "Success",
+                    automaticReplayEligible: false,
+                    governanceAction: "none",
+                    governanceHint: "已成功送达，无需进一步治理。",
                 },
                 processing: null as { ownerId?: string } | null,
                 history: [
@@ -386,6 +396,10 @@ export function ensureDevInjectedChannels() {
                     pausedAt: mockIngressBackgroundReplayPausedAt,
                 },
                 counts,
+                receiptCategoryCounts: {
+                    "http-server": 1,
+                    success: includeResolved ? 1 : 0,
+                },
                 entries: visibleReplayEntries,
             },
             supportedReplyTransports: ["webhook", "lark-bot-webhook", "dingtalk-bot-webhook", "slack-webhook", "discord-webhook", "teams-webhook"],
@@ -432,6 +446,33 @@ export function ensureDevInjectedChannels() {
                     automaticReplayExecutor: "sidecar-direct",
                     serviceUsesSidecarOperatorApi: false,
                 },
+            },
+            receiptTaxonomy: {
+                categories: [
+                    {
+                        id: "http-server",
+                        label: "HTTP Server Error",
+                        automaticReplayEligible: true,
+                        governanceAction: "retry",
+                        description: "上游 5xx 或超时类错误，适合继续自动重试。",
+                    },
+                    {
+                        id: "provider-policy",
+                        label: "Provider Policy Rejection",
+                        automaticReplayEligible: false,
+                        governanceAction: "update-provider-policy",
+                        description: "provider 策略或内容规则拦截，应该先调整机器人策略或内容。",
+                    },
+                    {
+                        id: "success",
+                        label: "Success",
+                        automaticReplayEligible: false,
+                        governanceAction: "none",
+                        description: "已成功送达，无需进一步治理。",
+                    },
+                ],
+                automaticReplayCategories: ["http-server"],
+                operatorManagedCategories: ["provider-policy"],
             },
             runtimeNote: mockIngressBackgroundReplayPaused
                 ? "当前 automatic replay 已被 operator 暂停；手动重试和 resolve 仍可继续使用。"

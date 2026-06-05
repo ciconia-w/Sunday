@@ -75,6 +75,16 @@ const checks = {
         && ingressReplyDeliverySource.includes("responseBodyPreview")
         && ingressReplyDeliverySource.includes("errcode")
         && externalIngressSource.includes("routeMutationAuthority"),
+    ingressClassifiesReceiptTaxonomy: ingressReplayStoreSource.includes("receiptCategory")
+        && ingressReplayStoreSource.includes("automaticReplayEligible")
+        && ingressReplayStoreSource.includes("governanceAction")
+        && ingressReplayStoreSource.includes("governanceHint")
+        && ingressReplayStoreSource.includes("transport-network")
+        && ingressReplayStoreSource.includes("provider-policy"),
+    ingressUsesTaxonomyForReplayGovernance: ingressReplayStoreSource.includes("deliveryReceiptAllowsAutomaticReplay")
+        && externalIngressSource.includes("deliveryReceiptAllowsAutomaticReplay")
+        && externalIngressSource.includes("receiptTaxonomy")
+        && ingressReplayWorkerSource.includes("deliveryReceiptAllowsAutomaticReplay"),
     ingressRunsBackgroundReplayWorker: externalIngressSource.includes("backgroundReplayEnabled")
         && externalIngressSource.includes("backgroundReplayDelaysMs")
         && externalIngressSource.includes("startBackgroundReplayLoop")
@@ -143,6 +153,12 @@ const checks = {
         && ingressDocSource.includes("providerCode")
         && ingressDocSource.includes("providerMessage")
         && ingressDocSource.includes("responseBodyPreview"),
+    docExplainsReceiptTaxonomyAndGovernance: ingressDocSource.includes("receiptCategory")
+        && ingressDocSource.includes("automaticReplayEligible")
+        && ingressDocSource.includes("governanceAction")
+        && ingressDocSource.includes("governanceHint")
+        && ingressDocSource.includes("transport-network")
+        && ingressDocSource.includes("provider-policy"),
     docExplainsReplayOperatorSurface: ingressDocSource.includes("external-ingress-replay-queue.json")
         && ingressDocSource.includes("/ingress/get-replay-queue")
         && ingressDocSource.includes("/ingress/replay-queue/replay")
