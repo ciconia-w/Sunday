@@ -3,6 +3,8 @@ import { executeReplyDelivery, normalizeReplyTransport, normalizeRetryDelays, SU
 import {
     IngressReplayStore,
     createDefaultBackgroundReplayControl,
+    deliveryReceiptAllowsAutomaticReplay,
+    getDeliveryReceiptTaxonomy,
     normalizeReplayProcessing,
     normalizeReplayQueueEntryRecord as normalizeReplayQueueEntryRecordFromStore,
     summarizeReplayQueueEntry as summarizeReplayQueueEntryFromStore,
@@ -270,6 +272,19 @@ function buildSupportedReplyTransports() {
     return [...SUPPORTED_REPLY_TRANSPORTS];
 }
 
+function buildReceiptTaxonomyState() {
+    const categories = getDeliveryReceiptTaxonomy();
+    return {
+        categories,
+        automaticReplayCategories: categories
+            .filter((entry) => entry.automaticReplayEligible === true)
+            .map((entry) => entry.id),
+        operatorManagedCategories: categories
+            .filter((entry) => entry.automaticReplayEligible !== true && entry.id !== "success")
+            .map((entry) => entry.id),
+    };
+}
+
 function createFutureIso(ms) {
     return new Date(Date.now() + Math.max(0, ms)).toISOString();
 }
@@ -517,6 +532,15 @@ export class ExternalIngress {
             .filter((entry) => includeResolved || !["resolved", "discarded"].includes(String(entry.status ?? "")))
             .sort((left, right) => String(left.createdAt ?? "").localeCompare(String(right.createdAt ?? "")))
             .map((entry) => summarizeReplayQueueEntryFromStore(entry));
+        const receiptCategoryCounts = Object.fromEntries(
+            entries.reduce((map, entry) => {
+                const category = typeof entry.latestReceipt?.receiptCategory === "string" && entry.latestReceipt.receiptCategory.trim()
+                    ? entry.latestReceipt.receiptCategory.trim()
+                    : "unknown-failure";
+                map.set(category, (map.get(category) ?? 0) + 1);
+                return map;
+            }, new Map()),
+        );
 
         const counts = {
             total: entries.length,
@@ -540,6 +564,7 @@ export class ExternalIngress {
                 pausedAt: this.getBackgroundReplayControlState().pausedAt,
             },
             counts,
+            receiptCategoryCounts,
             entries,
         };
     }
@@ -624,6 +649,7 @@ export class ExternalIngress {
         const replayQueue = await this.getReplayQueue(options);
         const backgroundReplayServiceStatus = await this.getBackgroundReplayServiceStatus();
         const backgroundReplayControl = this.getBackgroundReplayControlState();
+        const receiptTaxonomy = buildReceiptTaxonomyState();
         const ownership = {
             routePersistence: "shared-runtime-store",
             routeMutationAuthority: "sidecar-direct",
@@ -675,19 +701,21 @@ export class ExternalIngress {
                 control: backgroundReplayControl,
                 ownership,
             },
+            receiptTaxonomy,
             runtimeNote,
         };
     }
 
     async createReplayQueueEntry(replyTarget, payload, errors, latestReceipt = null) {
         const now = new Date().toISOString();
+        const automaticReplayEligible = deliveryReceiptAllowsAutomaticReplay(latestReceipt);
         const nextAttemptAt =
-            this.backgroundReplayEnabled && this.backgroundReplayDelaysMs.length > 0
+            this.backgroundReplayEnabled && automaticReplayEligible && this.backgroundReplayDelaysMs.length > 0
                 ? createFutureIso(this.backgroundReplayDelaysMs[0])
                 : "";
         const entry = {
             id: randomUUID(),
-            status: "pending",
+            status: automaticReplayEligible ? "pending" : "awaiting-operator",
             transport: replyTarget.transport ?? "",
             routeKey: payload?.routeKey ?? "",
             conversationId: payload?.conversationId ?? "",
@@ -1063,8 +1091,9 @@ export class ExternalIngress {
                 const currentAutomaticReplayCount = normalizeNonNegativeInteger(nextEntry.automaticReplayCount, 0);
                 const nextDelayIndex = automatic ? currentAutomaticReplayCount : currentAutomaticReplayCount;
                 const nextDelayMs = this.getNextAutomaticReplayDelayMsForIndex(nextDelayIndex);
+                const automaticReplayEligible = deliveryReceiptAllowsAutomaticReplay(nextEntry.latestReceipt);
 
-                if (nextDelayMs >= 0) {
+                if (automaticReplayEligible && nextDelayMs >= 0) {
                     nextEntry.status = "pending";
                     nextEntry.nextAttemptAt = createFutureIso(nextDelayMs);
                 } else {

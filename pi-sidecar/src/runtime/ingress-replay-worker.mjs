@@ -2,6 +2,7 @@ import { resolve } from "node:path";
 import {
     IngressReplayStore,
     appendReplayHistory,
+    deliveryReceiptAllowsAutomaticReplay,
     normalizeNonNegativeInteger,
     normalizeReplayProcessing,
     normalizeReplayQueueEntryRecord,
@@ -197,12 +198,13 @@ async function processReplayEntry(entry) {
         nextEntry.latestError = delivery.errors[delivery.errors.length - 1]?.error ?? "Reply delivery failed";
         nextEntry.errors = [...(Array.isArray(nextEntry.errors) ? nextEntry.errors : []), ...delivery.errors];
 
+        const automaticReplayEligible = deliveryReceiptAllowsAutomaticReplay(nextEntry.latestReceipt);
         const nextDelayMs = getNextAutomaticReplayDelayMs(
             backgroundReplayPolicy.delaysMs,
             normalizeNonNegativeInteger(nextEntry.automaticReplayCount, 0),
         );
 
-        if (nextDelayMs >= 0) {
+        if (automaticReplayEligible && nextDelayMs >= 0) {
             nextEntry.status = "pending";
             nextEntry.nextAttemptAt = createFutureIso(nextDelayMs);
         } else {

@@ -341,6 +341,12 @@ try {
             && failingReplayEntry.latestReceipt.providerMessage.includes("keyword not in whitelist"),
         failingReplayEntryCapturesResponsePreview: typeof failingReplayEntry?.latestReceipt?.responseBodyPreview === "string"
             && failingReplayEntry.latestReceipt.responseBodyPreview.includes("errcode"),
+        failingReplayEntryClassifiesProviderPolicy: failingReplayEntry?.latestReceipt?.receiptCategory === "provider-policy"
+            && failingReplayEntry?.latestReceipt?.receiptCategoryLabel === "Provider Policy Rejection",
+        failingReplayEntryMarksOperatorManaged: failingReplayEntry?.latestReceipt?.automaticReplayEligible === false
+            && failingReplayEntry?.latestReceipt?.governanceAction === "update-provider-policy"
+            && typeof failingReplayEntry?.latestReceipt?.governanceHint === "string"
+            && failingReplayEntry.latestReceipt.governanceHint.includes("provider"),
     };
 
     const verdict = Object.values(checks).every(Boolean)

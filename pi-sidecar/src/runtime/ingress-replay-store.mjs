@@ -40,8 +40,230 @@ function normalizeProviderCode(value) {
     return "";
 }
 
+const DELIVERY_RECEIPT_TAXONOMY = Object.freeze([
+    {
+        id: "success",
+        label: "Success",
+        automaticReplayEligible: false,
+        governanceAction: "none",
+        description: "已成功送达，无需进一步治理。",
+    },
+    {
+        id: "transport-network",
+        label: "Transport / Network",
+        automaticReplayEligible: true,
+        governanceAction: "retry",
+        description: "网络或连接层错误，适合继续自动重试。",
+    },
+    {
+        id: "http-rate-limit",
+        label: "HTTP Rate Limit",
+        automaticReplayEligible: true,
+        governanceAction: "retry-later",
+        description: "上游返回限流状态，适合等待窗口后自动重试。",
+    },
+    {
+        id: "http-server",
+        label: "HTTP Server Error",
+        automaticReplayEligible: true,
+        governanceAction: "retry",
+        description: "上游 5xx 或超时类错误，适合继续自动重试。",
+    },
+    {
+        id: "http-auth",
+        label: "HTTP Auth Failure",
+        automaticReplayEligible: false,
+        governanceAction: "check-credentials",
+        description: "HTTP 鉴权失败，应该先检查 webhook 凭证或权限。",
+    },
+    {
+        id: "http-client",
+        label: "HTTP Client Error",
+        automaticReplayEligible: false,
+        governanceAction: "fix-request",
+        description: "请求本身不合法，应该先修正请求或 endpoint。",
+    },
+    {
+        id: "provider-rate-limit",
+        label: "Provider Rate Limit",
+        automaticReplayEligible: true,
+        governanceAction: "retry-later",
+        description: "provider 应用层限流，适合延后自动重试。",
+    },
+    {
+        id: "provider-auth",
+        label: "Provider Auth Failure",
+        automaticReplayEligible: false,
+        governanceAction: "check-credentials",
+        description: "provider 应用层鉴权失败，应该先检查 secret、sign 或 token。",
+    },
+    {
+        id: "provider-policy",
+        label: "Provider Policy Rejection",
+        automaticReplayEligible: false,
+        governanceAction: "update-provider-policy",
+        description: "provider 策略或内容规则拦截，应该先调整机器人策略或内容。",
+    },
+    {
+        id: "provider-invalid-request",
+        label: "Provider Invalid Request",
+        automaticReplayEligible: false,
+        governanceAction: "fix-request",
+        description: "provider 认为请求参数或结构不合法，应该先修正请求。",
+    },
+    {
+        id: "provider-unknown",
+        label: "Provider Unknown Failure",
+        automaticReplayEligible: false,
+        governanceAction: "inspect-provider",
+        description: "provider 返回了未归类的应用层失败，应该先人工检查。",
+    },
+    {
+        id: "unknown-failure",
+        label: "Unknown Failure",
+        automaticReplayEligible: false,
+        governanceAction: "inspect-provider",
+        description: "当前无法稳定归类，默认交给 operator 判断。",
+    },
+]);
+
+const DELIVERY_RECEIPT_TAXONOMY_BY_ID = new Map(
+    DELIVERY_RECEIPT_TAXONOMY.map((entry) => [entry.id, entry]),
+);
+
 function createFutureIso(ms) {
     return new Date(Date.now() + Math.max(0, ms)).toISOString();
+}
+
+function normalizeLowerJoinedText(parts) {
+    return (Array.isArray(parts) ? parts : [])
+        .filter((item) => typeof item === "string" && item.trim())
+        .join(" ")
+        .toLowerCase();
+}
+
+function textIncludesAny(text, candidates) {
+    return (Array.isArray(candidates) ? candidates : []).some((candidate) =>
+        typeof candidate === "string" && candidate && text.includes(candidate),
+    );
+}
+
+function normalizeReceiptCategory(value) {
+    const normalized = normalizeString(value).trim();
+    return DELIVERY_RECEIPT_TAXONOMY_BY_ID.has(normalized) ? normalized : "unknown-failure";
+}
+
+function getReceiptTaxonomyEntry(category) {
+    return DELIVERY_RECEIPT_TAXONOMY_BY_ID.get(normalizeReceiptCategory(category))
+        ?? DELIVERY_RECEIPT_TAXONOMY_BY_ID.get("unknown-failure");
+}
+
+function classifyDeliveryReceipt(fields) {
+    const ok = fields?.ok === true;
+    const statusCode = normalizeNonNegativeInteger(fields?.statusCode, 0);
+    const combinedText = normalizeLowerJoinedText([
+        normalizeString(fields?.error),
+        normalizeProviderCode(fields?.providerCode),
+        normalizeString(fields?.providerMessage),
+        normalizeString(fields?.responseBodyPreview),
+        normalizeString(fields?.statusText),
+    ]);
+
+    let receiptCategory = "unknown-failure";
+
+    if (ok) {
+        receiptCategory = "success";
+    } else if (textIncludesAny(combinedText, [
+        "fetch failed",
+        "network",
+        "socket",
+        "timed out",
+        "timeout",
+        "econnrefused",
+        "enotfound",
+        "eai_again",
+        "connection reset",
+        "aborted",
+        "connect",
+    ])) {
+        receiptCategory = "transport-network";
+    } else if (textIncludesAny(combinedText, [
+        "rate limit",
+        "too many requests",
+        "quota",
+        "throttle",
+        "frequency limit",
+        "限流",
+        "频率",
+    ])) {
+        receiptCategory = fields?.providerCode ? "provider-rate-limit" : "http-rate-limit";
+    } else if (textIncludesAny(combinedText, [
+        "signature",
+        "invalid signature",
+        "sign not match",
+        "secret",
+        "token",
+        "unauthorized",
+        "permission denied",
+        "access denied",
+        "forbidden",
+        "credential",
+        "鉴权",
+        "签名",
+        "权限",
+    ])) {
+        receiptCategory = fields?.providerCode ? "provider-auth" : "http-auth";
+    } else if (textIncludesAny(combinedText, [
+        "keyword not in whitelist",
+        "whitelist",
+        "white list",
+        "content not allowed",
+        "sensitive",
+        "policy",
+        "关键词",
+        "白名单",
+        "审核",
+    ])) {
+        receiptCategory = "provider-policy";
+    } else if (textIncludesAny(combinedText, [
+        "invalid param",
+        "invalid request",
+        "bad request",
+        "missing",
+        "malformed",
+        "unsupported",
+        "illegal",
+        "not found",
+        "参数",
+        "格式",
+        "请求体",
+        "payload",
+    ])) {
+        receiptCategory = fields?.providerCode ? "provider-invalid-request" : "http-client";
+    } else if (fields?.providerCode) {
+        receiptCategory = "provider-unknown";
+    } else if (statusCode === 429) {
+        receiptCategory = "http-rate-limit";
+    } else if (statusCode === 401 || statusCode === 403) {
+        receiptCategory = "http-auth";
+    } else if (statusCode >= 500) {
+        receiptCategory = "http-server";
+    } else if (statusCode >= 400) {
+        receiptCategory = "http-client";
+    }
+
+    const taxonomyEntry = getReceiptTaxonomyEntry(receiptCategory);
+    return {
+        receiptCategory: taxonomyEntry.id,
+        receiptCategoryLabel: taxonomyEntry.label,
+        automaticReplayEligible: taxonomyEntry.automaticReplayEligible,
+        governanceAction: taxonomyEntry.governanceAction,
+        governanceHint: taxonomyEntry.description,
+    };
+}
+
+export function getDeliveryReceiptTaxonomy() {
+    return DELIVERY_RECEIPT_TAXONOMY.map((entry) => ({ ...entry }));
 }
 
 async function readJson(path, fallback) {
@@ -220,6 +442,7 @@ export function normalizeDeliveryReceipt(value) {
         return null;
     }
 
+    const classification = classifyDeliveryReceipt(value);
     return {
         actor: normalizeString(value.actor),
         mode: normalizeString(value.mode),
@@ -233,6 +456,13 @@ export function normalizeDeliveryReceipt(value) {
         providerMessage: normalizeString(value.providerMessage),
         responseBodyPreview: normalizeString(value.responseBodyPreview),
         providerPayloadPreview: normalizeString(value.providerPayloadPreview),
+        receiptCategory: normalizeReceiptCategory(value.receiptCategory || classification.receiptCategory),
+        receiptCategoryLabel: normalizeString(value.receiptCategoryLabel || classification.receiptCategoryLabel),
+        automaticReplayEligible: value.automaticReplayEligible === true || (
+            value.automaticReplayEligible !== false && classification.automaticReplayEligible === true
+        ),
+        governanceAction: normalizeString(value.governanceAction || classification.governanceAction),
+        governanceHint: normalizeString(value.governanceHint || classification.governanceHint),
     };
 }
 
@@ -262,6 +492,16 @@ export function createDeliveryReceipt({
         }
     })();
 
+    const classification = classifyDeliveryReceipt({
+        ok,
+        statusCode,
+        statusText,
+        error,
+        providerCode,
+        providerMessage,
+        responseBodyPreview,
+    });
+
     return normalizeDeliveryReceipt({
         actor,
         mode,
@@ -275,7 +515,16 @@ export function createDeliveryReceipt({
         providerMessage,
         responseBodyPreview: normalizeString(responseBodyPreview).slice(0, 240),
         providerPayloadPreview,
+        receiptCategory: classification.receiptCategory,
+        receiptCategoryLabel: classification.receiptCategoryLabel,
+        automaticReplayEligible: classification.automaticReplayEligible,
+        governanceAction: classification.governanceAction,
+        governanceHint: classification.governanceHint,
     });
+}
+
+export function deliveryReceiptAllowsAutomaticReplay(receipt) {
+    return normalizeDeliveryReceipt(receipt)?.automaticReplayEligible === true;
 }
 
 export function normalizeReplayProcessing(value) {

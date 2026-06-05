@@ -134,13 +134,19 @@ Current state:
 - replay queue ownership is now down in a shared runtime store, and dedicated / standalone workers read it directly
 - operator state and `IM Bridge` UI now expose queue ownership, route ownership, latest delivery receipt, and active processing claim
 - route persistence is now also expressed through the shared runtime store contract, with `routeMutationAuthority` still staying on sidecar
-- provider-specific delivery receipts now start exposing structured `providerCode / providerMessage / responseBodyPreview` instead of only raw HTTP outcome
+- provider-specific delivery receipts now expose structured `providerCode / providerMessage / responseBodyPreview`
+- reply delivery now also exposes a minimal receipt taxonomy and governance hint:
+  - `receiptCategory`
+  - `automaticReplayEligible`
+  - `governanceAction`
+  - `governanceHint`
+- automatic replay policy now consumes that taxonomy, so obviously non-retryable provider failures can move directly to `awaiting-operator`
 
 Current gaps:
 
 - platform-specific bridge logic still needs to be layered on top of the generic ingress contract
 - provider coverage is still narrow; broader platform coverage is still missing
-- retry policy is richer but still intentionally minimal; finer governance and broader provider receipt taxonomy are still missing
+- retry policy is richer but still intentionally minimal; scoped governance beyond the current taxonomy/policy layer is still missing
 
 Recommended next step:
 

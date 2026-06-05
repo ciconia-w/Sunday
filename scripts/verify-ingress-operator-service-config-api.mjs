@@ -308,15 +308,27 @@ try {
         initialPayload.backgroundReplay?.ownership?.replayQueuePersistence === "shared-runtime-store" &&
         initialPayload.backgroundReplay?.ownership?.automaticReplayExecutor === "sidecar-direct" &&
         initialPayload.backgroundReplay?.ownership?.serviceUsesSidecarOperatorApi === false &&
+        Array.isArray(initialPayload.receiptTaxonomy?.categories) &&
+        initialPayload.receiptTaxonomy.categories.some((entry) => entry.id === "http-server" && entry.automaticReplayEligible === true) &&
+        initialPayload.receiptTaxonomy.categories.some((entry) => entry.id === "provider-policy" && entry.automaticReplayEligible === false) &&
+        Array.isArray(initialPayload.receiptTaxonomy?.automaticReplayCategories) &&
+        initialPayload.receiptTaxonomy.automaticReplayCategories.includes("http-server") &&
+        Array.isArray(initialPayload.receiptTaxonomy?.operatorManagedCategories) &&
+        initialPayload.receiptTaxonomy.operatorManagedCategories.includes("provider-policy") &&
         typeof initialPayload.runtimeNote === "string" &&
         initialPayload.runtimeNote.includes("background replay") &&
         initialPayload.replayQueue?.counts?.processing === 0 &&
+        initialPayload.replayQueue?.receiptCategoryCounts?.["http-server"] === 1 &&
         initialEntry?.status === "pending" &&
         initialEntry?.latestReceipt?.ok === false &&
         initialEntry?.latestReceipt?.actor === "sidecar" &&
         initialEntry?.latestReceipt?.mode === "initial" &&
         initialEntry?.latestReceipt?.statusText === "Internal Server Error" &&
         initialEntry?.latestReceipt?.responseBodyPreview === "error" &&
+        initialEntry?.latestReceipt?.receiptCategory === "http-server" &&
+        initialEntry?.latestReceipt?.receiptCategoryLabel === "HTTP Server Error" &&
+        initialEntry?.latestReceipt?.automaticReplayEligible === true &&
+        initialEntry?.latestReceipt?.governanceAction === "retry" &&
         initialEntry?.processing == null &&
         replayActionResult?.status === 200 &&
         replayActionResult?.body?.ok === true &&
@@ -328,6 +340,8 @@ try {
         replayPayload?.entry?.latestReceipt?.mode === "manual" &&
         replayPayload?.entry?.latestReceipt?.statusText === "OK" &&
         replayPayload?.entry?.latestReceipt?.responseBodyPreview === "ok" &&
+        replayPayload?.entry?.latestReceipt?.receiptCategory === "success" &&
+        replayPayload?.entry?.latestReceipt?.governanceAction === "none" &&
         replayPayload?.entry?.processing == null &&
         resolvedState?.status === 200 &&
         resolvedState?.body?.ok === true &&

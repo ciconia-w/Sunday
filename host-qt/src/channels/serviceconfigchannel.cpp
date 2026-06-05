@@ -89,6 +89,7 @@ QJsonObject defaultIngressOperatorState()
     QJsonObject replayQueue{
         {QStringLiteral("worker"), replayWorker},
         {QStringLiteral("counts"), replayCounts},
+        {QStringLiteral("receiptCategoryCounts"), QJsonObject()},
         {QStringLiteral("entries"), QJsonArray()},
     };
     QJsonObject backgroundReplay{
@@ -149,6 +150,11 @@ QJsonObject defaultIngressOperatorState()
         }},
         {QStringLiteral("replyRetryPolicy"), replyRetryPolicy},
         {QStringLiteral("backgroundReplay"), backgroundReplay},
+        {QStringLiteral("receiptTaxonomy"), QJsonObject{
+            {QStringLiteral("categories"), QJsonArray()},
+            {QStringLiteral("automaticReplayCategories"), QJsonArray()},
+            {QStringLiteral("operatorManagedCategories"), QJsonArray()},
+        }},
         {QStringLiteral("runtimeNote"), QStringLiteral("当前 background replay worker 仍运行在 sidecar 进程内，但 replay queue 已统一下沉到 shared runtime store。")},
     };
 }
